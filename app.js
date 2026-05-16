@@ -14,7 +14,21 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  const rootIndex = path.join(__dirname, "index.html");
+  const publicIndex = path.join(__dirname, "public", "index.html");
+
+  res.sendFile(publicIndex, (err) => {
+    if (err) {
+      res.sendFile(rootIndex, (err2) => {
+        if (err2) {
+          res.status(200).send(`
+            <h1>Celestial Yokai Mothership</h1>
+            <p>Server works, but no index.html was found.</p>
+          `);
+        }
+      });
+    }
+  });
 });
 
 // ── Species Registry API ──────────────────────────────────────────────────────
