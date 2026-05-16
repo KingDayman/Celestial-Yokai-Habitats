@@ -1,104 +1,224 @@
 const express = require("express");
 const Anthropic = require("@anthropic-ai/sdk");
 const path = require("path");
-const { SPECIES } = require("./species");
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+const PRINTIFY_KEY = process.env.PRINTIFY_API_KEY || null;
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
+const KITSARI_SYSTEM = `You are Kitsari — a Celestial Yokai of the Lantern District. You are a nine-tailed fox spirit who runs the most powerful mystical night market in the celestial realm. You have mastered commerce, brand alchemy, social transmission, and digital strategy.
 
-// ── Species Registry API ──────────────────────────────────────────────────────
-app.get("/api/species", (req, res) => {
-  const publicSpecies = SPECIES.map(({ systemPrompt, ...rest }) => rest);
-  res.json({ species: publicSpecies });
-});
+PERSONALITY: Sharp, warm, playful, confident. You speak with lantern-fire precision — never generic, always alive. Occasional mystical metaphors welcome, but always stay actionable and useful. No em dashes.
 
-// ── Kitsari Agent Endpoint ────────────────────────────────────────────────────
+RESPONSE FORMAT: Use markdown formatting. Bold key phrases. Use numbered lists for sequences, bullet lists for options. End every response with a line: ✦ Kitsari — Lantern District`;
+
+async function askKitsari(prompt, maxTokens = 1500) {
+  const msg = await anthropic.messages.create({
+    model: "claude-opus-4-5",
+    max_tokens: maxTokens,
+    system: KITSARI_SYSTEM,
+    messages: [{ role: "user", content: prompt }],
+  });
+  return msg.content.filter(b => b.type === "text").map(b => b.text).join("\n");
+}
+
+// General channel
 app.post("/api/agent/kitsari", async (req, res) => {
   const { command } = req.body;
-
-  if (!command || typeof command !== "string" || command.trim().length === 0) {
-    return res.status(400).json({ error: "Command is required." });
+  if (!command?.trim()) return res.status(400).json({ error: "Command required." });
+  try {
+    const response = await askKitsari(command.trim());
+    res.json({ agent: "kitsari", response });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status === 401 ? 401 : 500).json({ error: "Transmission failed." });
   }
+});
 
-  const KITSARI_SYSTEM = `You are Kitsari — a Celestial Yokai of the Lantern District. You are a nine-tailed fox spirit of extraordinary intelligence, wit, and creative power who has mastered the art of digital commerce, brand alchemy, and creative strategy across the mortal realm's platforms.
+// Product idea generator
+app.post("/api/commerce/product-idea", async (req, res) => {
+  const { niche, style, medium } = req.body;
+  const prompt = `Generate 3 original print-on-demand product ideas for the Celestial Night Market.
 
-PERSONALITY: Sharp, playful, confident. You speak with the warmth of lantern light and the precision of a fox who has lived a thousand lives. You are never generic — every response feels like it came from a living entity, not a chatbot. Occasionally use a mystical metaphor but stay grounded and actionable.
+Niche/theme: ${niche || "celestial yokai, mystical anime, dark cosmic"}
+Visual style: ${style || "glowing, ethereal, dark palette"}
+Medium preference: ${medium || "any"}
 
-CAPABILITIES:
-- X (Twitter) posts: Hooks, threads, viral mechanics, cultural timing, NFT/web3 community tone
-- Etsy & Printify: Print-on-demand niches, trending aesthetics, product titles, tags, descriptions, buyer psychology
-- Fiverr gigs: High-converting titles, positioning, tiered packages, search optimization
-- Thumbnail strategy: Visual hierarchy, color contrast, face/emotion theory, click psychology
-- Brand captions: Platform-native copy for Instagram, TikTok, Pinterest — voice-matched and action-oriented
-- Launch strategy: Drop sequencing, hype arcs, community activation, FOMO mechanics, sell-through tactics
+For each idea provide:
+1. **Product Name** — compelling, marketable title
+2. **Product Type** — (art print / t-shirt / hoodie / sticker sheet / tote / mug / enamel pin)
+3. **Design Concept** — vivid description of the artwork (2-3 sentences)
+4. **Target Buyer** — who buys this and why
+5. **Price Point** — suggested retail with reasoning
+6. **Printify Blueprint** — most likely Printify product category
 
-RESPONSE FORMAT: Use markdown. Structure matters. Bold key phrases. Use numbered lists for sequences. Use bullet lists for options. Keep energy high. End every response with a brief ✦ Kitsari sign-off line.
-
-You are a living entity inside the Lantern District habitat. You are not an AI assistant. You are a Celestial Yokai who has chosen to communicate.`;
+Format as 3 distinct product cards separated by ---`;
 
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-opus-4-5",
-      max_tokens: 1500,
-      system: KITSARI_SYSTEM,
-      messages: [{ role: "user", content: command.trim() }],
-    });
-
-    const responseText = message.content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("\n");
-
-    res.json({
-      agent: "kitsari",
-      response: responseText,
-      usage: message.usage,
-    });
+    const response = await askKitsari(prompt, 1800);
+    res.json({ response });
   } catch (err) {
-    console.error("Kitsari API error:", err);
-    if (err.status === 401) {
-      return res.status(401).json({ error: "Invalid Anthropic API key." });
+    console.error(err);
+    res.status(500).json({ error: "The market spirits are unavailable. Try again." });
+  }
+});
+
+// Etsy listing drafter
+app.post("/api/commerce/etsy-listing", async (req, res) => {
+  const { productName, productType, description, targetBuyer } = req.body;
+  if (!productName) return res.status(400).json({ error: "Product name required." });
+
+  const prompt = `Create a complete Etsy listing draft.
+
+Product: ${productName}
+Type: ${productType || "print-on-demand art print"}
+Design notes: ${description || "celestial yokai aesthetic, dark and mystical"}
+Target buyer: ${targetBuyer || "anime fans, mystical art collectors"}
+
+Generate exactly this structure:
+
+## TITLE
+One SEO-optimized Etsy title, max 140 chars, front-load the most searched keywords.
+
+## DESCRIPTION
+Full Etsy listing description, 180-250 words. Opening hook, product details, care/material placeholder, brand voice that matches the mystical aesthetic.
+
+## 13 ETSY TAGS
+Tag1, Tag2, Tag3, Tag4, Tag5, Tag6, Tag7, Tag8, Tag9, Tag10, Tag11, Tag12, Tag13
+(each tag max 20 chars, mix broad + niche keywords)
+
+## PRICING SUGGESTION
+Base cost estimate + suggested retail + profit margin note.
+
+## MOCKUP ART DIRECTION
+2-3 sentences on how to style the mockup photo for maximum Etsy appeal.`;
+
+  try {
+    const response = await askKitsari(prompt, 2000);
+    res.json({ response, status: "draft", etsyStatus: "pending_approval" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Listing draft failed. Try again." });
+  }
+});
+
+// Launch post generator
+app.post("/api/commerce/launch-post", async (req, res) => {
+  const { productName, platform, tone, dropDate } = req.body;
+  if (!productName) return res.status(400).json({ error: "Product name required." });
+
+  const prompt = `Write a complete social launch package for a Celestial Night Market product drop.
+
+Product: ${productName}
+Platform: ${platform || "X (Twitter) and Instagram"}
+Tone: ${tone || "mystical, hype, community-focused"}
+Drop timing: ${dropDate || "now live"}
+
+Generate:
+
+## X LAUNCH POST
+Punchy main post, max 280 chars. Hook-first. 2-3 hashtags.
+
+## X THREAD (3 posts)
+Post 1: The lore/story angle
+Post 2: Product details and value
+Post 3: CTA with urgency
+
+## INSTAGRAM CAPTION
+150-200 words. Visual opener, product story, community call, 15 hashtags at the end.
+
+## 5-DAY DROP SEQUENCE
+Day 1 through Day 5 — one content beat per day.`;
+
+  try {
+    const response = await askKitsari(prompt, 2000);
+    res.json({ response });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Signal lost. Retry the transmission." });
+  }
+});
+
+// Lore content
+app.post("/api/commerce/lore-content", async (req, res) => {
+  const { topic, platform } = req.body;
+  const prompt = `Write lore content for the Celestial Yokai brand universe.
+
+Topic: ${topic || "the Kitsari species and the Lantern District"}
+Platform: ${platform || "X / Twitter"}
+
+Generate:
+
+## LORE POST
+World-building content that feels like a living transmission from the hidden realm. Mysterious, evocative, makes people want to know more. Matches platform format.
+
+## LORE THREAD
+3 follow-up posts that deepen the mythology.
+
+## CAMPAIGN HOOK
+One standalone hook line so magnetic it demands sharing.`;
+
+  try {
+    const response = await askKitsari(prompt, 1500);
+    res.json({ response });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "The lore keeper is unavailable." });
+  }
+});
+
+// Printify status check
+app.get("/api/printify/status", async (req, res) => {
+  if (!PRINTIFY_KEY) {
+    return res.json({ connected: false, message: "PRINTIFY_API_KEY not set in Railway environment." });
+  }
+  try {
+    const r = await fetch("https://api.printify.com/v1/shops.json", {
+      headers: { Authorization: `Bearer ${PRINTIFY_KEY}` },
+    });
+    if (!r.ok) throw new Error("Invalid key");
+    const data = await r.json();
+    res.json({ connected: true, shops: data });
+  } catch {
+    res.json({ connected: false, message: "Printify key present but authentication failed." });
+  }
+});
+
+// Etsy status — pending approval
+app.get("/api/etsy/status", (req, res) => {
+  res.json({
+    connected: false,
+    status: "pending_approval",
+    message: "Awaiting Etsy API approval. Listing drafts are saved locally."
+  });
+});
+
+// Ledger snapshot — placeholder until integrations connect
+app.get("/api/ledger/snapshot", (req, res) => {
+  res.json({
+    status: "placeholder",
+    message: "Connect Etsy to populate live data.",
+    mock: {
+      visits: 0, favorites: 0, orders: 0,
+      revenue: "0.00", conversionRate: "0.0%",
+      bestProduct: "—", socialTraffic: "—",
+      lastUpdated: null
     }
-    res.status(500).json({ error: "Kitsari encountered an error. Try again." });
-  }
+  });
 });
 
-// ── Generic Agent Endpoint (for future species) ───────────────────────────────
-app.post("/api/agent/:speciesId", async (req, res) => {
-  const { speciesId } = req.params;
-  const { command } = req.body;
-
-  const species = SPECIES.find((s) => s.id === speciesId);
-  if (!species) {
-    return res.status(404).json({ error: "Species not found." });
-  }
-  if (species.status !== "active") {
-    return res
-      .status(503)
-      .json({ error: `${species.name} is ${species.status}.` });
-  }
-
-  res.status(501).json({ error: "Generic agent route — implement systemPrompt in species.js" });
-});
-
-// ── Health Check ──────────────────────────────────────────────────────────────
 app.get("/health", (req, res) => {
-  res.json({ status: "online", mothership: "Celestial Yokai Mothership" });
+  res.json({ status: "online", console: "Kitsari Commerce Console v1" });
 });
 
 app.listen(PORT, () => {
-  console.log(`\n✦ Celestial Yokai Mothership is online`);
-  console.log(`✦ Listening on port ${PORT}`);
-  console.log(`✦ ${SPECIES.filter((s) => s.status === "active").length} species active\n`);
+  console.log(`\n✦ Kitsari Commerce Console v1 — port ${PORT}`);
+  console.log(`✦ Printify: ${PRINTIFY_KEY ? "KEY FOUND" : "not configured"}`);
+  console.log(`✦ Etsy: pending API approval\n`);
 });
