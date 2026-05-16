@@ -2,10 +2,10 @@
   "name": "celestial-yokai-mothership",
   "version": "1.0.0",
   "description": "Command center for Celestial Yokai AI agents",
-  "main": "server.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node app.js",
+    "dev": "node app.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
