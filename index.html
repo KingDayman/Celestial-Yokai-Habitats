@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Celestial Yokai Mothership</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --void:#020307;--deep:#080c18;--panel:#0d1222;--panel2:#111829;
+  --fox:#b06aff;--fox2:#7c3aed;--foxdim:rgba(160,90,255,.13);--foxglow:rgba(160,90,255,.45);
+  --cyan:#c4a0ff;--cyandim:rgba(180,140,255,.15);--gold:#e8c97a;
+  --text:#E8D5C0;--muted:#6b6059;--border:rgba(140,80,255,.22);--borderdim:rgba(255,255,255,.06);
+  --r:12px;--rl:18px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--void);color:var(--text);font-family:'Rajdhani',sans-serif;-webkit-text-size-adjust:100%}
+body{min-height:100vh;overflow-x:hidden;padding-bottom:env(safe-area-inset-bottom)}
+button{cursor:pointer;border:none;background:none;font-family:inherit}
+textarea{font-family:inherit}
+.mono{font-family:'Share Tech Mono',monospace}
+
+#stars{position:fixed;inset:0;z-index:0;pointer-events:none}
+.s{position:absolute;border-radius:50%;background:#fff;animation:tw var(--d) var(--dl) infinite ease-in-out}
+@keyframes tw{0%,100%{opacity:var(--lo)}50%{opacity:var(--hi)}}
+
+.nb{position:fixed;border-radius:50%;pointer-events:none;z-index:0}
+.nb1{width:600px;height:600px;top:-180px;right:-140px;background:radial-gradient(circle,rgba(120,60,240,.1) 0%,transparent 68%)}
+.nb2{width:500px;height:500px;bottom:-120px;left:-120px;background:radial-gradient(circle,rgba(100,40,200,.1) 0%,transparent 68%)}
+.nb3{width:300px;height:300px;top:40%;left:50%;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(160,90,255,.05) 0%,transparent 70%)}
+
+.wrap{position:relative;z-index:10;max-width:680px;margin:0 auto;padding:0 1rem 4rem}
+
+header{text-align:center;padding:2.2rem 1rem 1.8rem;border-bottom:1px solid var(--border);margin-bottom:2rem;position:relative;z-index:10}
+.halo{font-size:3rem;animation:halo 4s ease-in-out infinite;display:block;margin-bottom:.5rem;filter:drop-shadow(0 0 14px var(--foxglow))}
+@keyframes halo{0%,100%{filter:drop-shadow(0 0 14px var(--foxglow))}50%{filter:drop-shadow(0 0 32px rgba(160,90,255,.8))}}
+.uptag{font-size:.6rem;letter-spacing:.25em;color:var(--muted);margin-bottom:.4rem}
+h1{font-family:'Cinzel Decorative',serif;font-size:clamp(1.25rem,5.5vw,2rem);font-weight:900;color:#fff;text-shadow:0 0 40px var(--foxglow),0 0 80px rgba(255,154,60,.12);line-height:1.15;letter-spacing:.03em}
+.sub{font-size:.82rem;color:var(--muted);margin-top:.4rem;font-weight:300;letter-spacing:.07em}
+.online-pill{display:inline-flex;align-items:center;gap:.4rem;margin-top:.9rem;background:var(--cyandim);border:1px solid rgba(78,205,196,.28);border-radius:20px;padding:.28rem .9rem}
+.online-pip{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.online-txt{font-size:.58rem;color:var(--cyan);letter-spacing:.15em}
+
+.slabel{font-size:.6rem;color:var(--fox);letter-spacing:.25em;padding-bottom:.6rem;border-bottom:1px solid var(--border);margin-bottom:1.25rem}
+
+.kcard{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:var(--rl);padding:1.5rem;overflow:hidden;margin-bottom:2.5rem;animation:fadein .7s ease both}
+@keyframes fadein{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.kcard-glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 0%,rgba(140,80,255,.12) 0%,transparent 60%)}
+.kicon-img{width:88px;height:88px;border-radius:50%;border:2px solid rgba(160,90,255,.5);box-shadow:0 0 20px rgba(140,80,255,.5),0 0 50px rgba(140,80,255,.2);flex-shrink:0;object-fit:cover;}
+
+.kcard-top{display:flex;align-items:flex-start;gap:1rem;margin-bottom:1.4rem}
+.kicon{font-size:3rem;filter:drop-shadow(0 0 14px var(--foxglow));flex-shrink:0;line-height:1}
+.kmeta{flex:1;min-width:0}
+.kdist{font-size:.56rem;letter-spacing:.22em;color:var(--fox);margin-bottom:.15rem}
+.kname{font-family:'Cinzel Decorative',serif;font-size:1.55rem;font-weight:700;color:#fff;text-shadow:0 0 18px rgba(160,90,255,.7);line-height:1.1}
+.ktag{font-size:.78rem;color:var(--muted);font-style:italic;margin-top:.15rem}
+.kbadge{display:flex;align-items:center;gap:.35rem;background:var(--cyandim);border:1px solid rgba(78,205,196,.3);border-radius:20px;padding:.25rem .7rem;flex-shrink:0;align-self:flex-start}
+.kbadge-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 7px var(--cyan);animation:blink 2s ease-in-out infinite}
+.kbadge-txt{font-size:.55rem;color:var(--cyan);letter-spacing:.15em}
+
+.caps-lbl{font-size:.57rem;letter-spacing:.2em;color:var(--muted);margin-bottom:.55rem}
+.caps{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1.5rem}
+.cap{background:var(--foxdim);border:1px solid var(--border);border-radius:6px;padding:.22rem .65rem;font-size:.72rem;color:var(--fox);font-weight:600;letter-spacing:.04em;transition:background .2s,border-color .2s}
+.cap:hover{background:rgba(255,154,60,.24);border-color:var(--fox)}
+
+.terminal{background:var(--deep);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.tbar{display:flex;justify-content:space-between;align-items:center;padding:.55rem .9rem;background:rgba(255,154,60,.055);border-bottom:1px solid var(--border)}
+.tbar-l{font-size:.6rem;color:var(--fox);letter-spacing:.12em}
+.tbar-r{font-size:.55rem;color:var(--muted);letter-spacing:.1em}
+textarea#cmd{width:100%;background:transparent;border:none;outline:none;color:var(--text);font-family:'Rajdhani',sans-serif;font-size:.95rem;font-weight:500;line-height:1.65;padding:.9rem;resize:none;min-height:96px}
+textarea#cmd::placeholder{color:var(--muted);font-style:italic}
+.tfoot{display:flex;justify-content:space-between;align-items:center;padding:.55rem .9rem;border-top:1px solid var(--borderdim)}
+.charct{font-size:.58rem;color:var(--muted);letter-spacing:.08em}
+#sendbtn{display:flex;align-items:center;gap:.45rem;background:linear-gradient(135deg,#9b5cf6 0%,#6d28d9 100%);border-radius:8px;padding:.5rem 1.2rem;font-family:'Share Tech Mono',monospace;font-size:.7rem;color:#fff;font-weight:700;letter-spacing:.14em;box-shadow:0 0 18px rgba(140,80,255,.35);transition:all .2s}
+#sendbtn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 0 32px rgba(140,80,255,.6)}
+#sendbtn:disabled{opacity:.45;transform:none}
+
+#loading{display:none;align-items:center;gap:.85rem;padding:1rem 0}
+.orbs{display:flex;gap:.35rem}
+.orbs span{width:7px;height:7px;border-radius:50%;background:#9b5cf6;animation:ob 1.2s ease-in-out infinite}
+.orbs span:nth-child(2){animation-delay:.18s}
+.orbs span:nth-child(3){animation-delay:.36s}
+@keyframes ob{0%,100%{transform:translateY(0);opacity:.25}50%{transform:translateY(-6px);opacity:1}}
+.ldtxt{font-size:.65rem;color:var(--muted);letter-spacing:.12em}
+
+#respanel{display:none;margin-top:1.1rem;background:var(--panel2);border:1px solid rgba(140,80,255,.3);border-radius:var(--r);overflow:hidden;animation:fadein .35s ease both}
+.respbar{display:flex;justify-content:space-between;align-items:center;padding:.5rem .9rem;background:rgba(140,80,255,.07);border-bottom:1px solid rgba(140,80,255,.18)}
+.respbar-l{font-size:.6rem;color:var(--fox);letter-spacing:.12em}
+#copybtn{background:none;border:1px solid var(--borderdim);border-radius:4px;color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:.58rem;padding:.18rem .5rem;letter-spacing:.1em;transition:all .2s}
+#copybtn:hover{border-color:var(--fox);color:var(--fox)}
+#resbody{padding:1.1rem;font-size:.93rem;line-height:1.78;color:var(--text);white-space:pre-wrap;word-wrap:break-word}
+#resbody strong{color:#b06aff;font-weight:700}
+#resbody em{color:var(--muted);font-style:italic}
+
+#errbox{display:none;margin-top:.9rem;background:rgba(255,60,60,.07);border:1px solid rgba(255,60,60,.28);border-radius:var(--r);padding:.75rem .9rem}
+#errtxt{font-size:.8rem;color:#FF7070;font-family:'Share Tech Mono',monospace;letter-spacing:.04em}
+
+#registry{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:3rem}
+.rcard{background:var(--panel);border:1px solid var(--borderdim);border-radius:var(--r);padding:1rem;position:relative;overflow:hidden;transition:border-color .2s,transform .2s;animation:fadein .6s ease both}
+.rcard:hover{border-color:var(--border);transform:translateY(-2px)}
+.rcard.active{border-color:var(--border)}
+.rcglow{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;background:radial-gradient(ellipse at 50% 0%,var(--sg) 0%,transparent 70%)}
+.rcard:hover .rcglow,.rcard.active .rcglow{opacity:1}
+.ricon{font-size:1.6rem;margin-bottom:.35rem;line-height:1}
+.rdist{font-size:.5rem;letter-spacing:.18em;color:var(--muted);margin-bottom:.12rem}
+.rname{font-family:'Cinzel Decorative',serif;font-size:.82rem;font-weight:700;margin-bottom:.18rem;line-height:1.2}
+.rtag{font-size:.68rem;color:var(--muted);font-style:italic;margin-bottom:.6rem;line-height:1.3}
+.rstatus{display:inline-flex;align-items:center;gap:.3rem;font-family:'Share Tech Mono',monospace;font-size:.52rem;letter-spacing:.13em;padding:.18rem .5rem;border-radius:20px}
+.rstatus.active{background:var(--cyandim);border:1px solid rgba(78,205,196,.28);color:var(--cyan)}
+.rstatus.dormant{background:rgba(255,255,255,.03);border:1px solid var(--borderdim);color:var(--muted)}
+.rstatus.locked{background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.2);color:var(--gold)}
+.rpip{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdim);position:relative;z-index:10}
+.ftxt{font-size:.55rem;color:var(--muted);letter-spacing:.18em}
+
+@media(min-width:480px){#registry{grid-template-columns:repeat(3,1fr)}.kname{font-size:1.8rem}}
+@media(min-width:640px){#registry{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+
+<div id="stars"></div>
+<div class="nb nb1"></div>
+<div class="nb nb2"></div>
+<div class="nb nb3"></div>
+
+<header>
+  <span class="halo">✦</span>
+  <p class="uptag mono">COMMAND UPLINK // SECTOR 9 // INITIALIZED</p>
+  <h1>Celestial Yokai<br>Mothership</h1>
+  <p class="sub">Eight species. One command center. Infinite signal.</p>
+  <div class="online-pill">
+    <span class="online-pip"></span>
+    <span class="online-txt mono" id="clocktxt">ONLINE</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <p class="slabel mono">✦ ACTIVE HABITAT</p>
+
+  <div class="kcard">
+    <div class="kcard-glow"></div>
+    <div class="kcard-top">
+      <img src="/kitsari.png" alt="Kitsari" class="kicon-img"/>
+      <div class="kmeta">
+        <div class="kdist mono">LANTERN DISTRICT</div>
+        <div class="kname">Kitsari</div>
+        <div class="ktag">Clever. Radiant. Always selling.</div>
+      </div>
+      <div class="kbadge">
+        <span class="kbadge-dot"></span>
+        <span class="kbadge-txt mono">ACTIVE</span>
+      </div>
+    </div>
+
+    <p class="caps-lbl mono">CAPABILITIES</p>
+    <div class="caps">
+      <span class="cap">X Posts</span>
+      <span class="cap">Etsy / Printify</span>
+      <span class="cap">Fiverr Gigs</span>
+      <span class="cap">Thumbnails</span>
+      <span class="cap">Brand Captions</span>
+      <span class="cap">Launch Strategy</span>
+    </div>
+
+    <div class="terminal">
+      <div class="tbar">
+        <span class="tbar-l mono">⟩ SEND COMMAND TO KITSARI</span>
+        <span class="tbar-r mono">AGENT::KITSARI</span>
+      </div>
+      <textarea id="cmd" rows="4" maxlength="1000" placeholder="e.g. Write 3 X posts for a mystical fox art drop targeting NFT collectors."></textarea>
+      <div class="tfoot">
+        <span class="charct mono" id="charct">0 / 1000</span>
+        <button id="sendbtn" onclick="sendCommand()">
+          <span id="btnlbl">TRANSMIT</span>
+          <span>✦</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="loading">
+      <div class="orbs"><span></span><span></span><span></span></div>
+      <span class="ldtxt mono">Kitsari is weaving her response...</span>
+    </div>
+
+    <div id="respanel">
+      <div class="respbar">
+        <span class="respbar-l mono">⟩ KITSARI RESPONDS</span>
+        <button id="copybtn" onclick="copyResp()">⎘ COPY</button>
+      </div>
+      <div id="resbody"></div>
+    </div>
+
+    <div id="errbox">
+      <div id="errtxt"></div>
+    </div>
+  </div>
+
+  <p class="slabel mono">✦ SPECIES REGISTRY — 8 CELESTIAL YOKAI</p>
+  <div id="registry"></div>
+</div>
+
+<footer>
+  <p class="ftxt mono">CELESTIAL YOKAI MOTHERSHIP // COMMAND UPLINK ACTIVE // ALL RIGHTS RESERVED ✦</p>
+</footer>
+
+<script>
+(function(){
+  const f=document.getElementById('stars');
+  for(let i=0;i<150;i++){
+    const s=document.createElement('div');s.className='s';
+    const sz=Math.random()*2.2+.4;
+    s.style.cssText='left:'+Math.random()*100+'%;top:'+Math.random()*100+'%;width:'+sz+'px;height:'+sz+'px;--d:'+(Math.random()*4+2).toFixed(1)+'s;--dl:'+(Math.random()*6).toFixed(1)+'s;--lo:'+(Math.random()*.12+.03).toFixed(2)+';--hi:'+(Math.random()*.55+.35).toFixed(2);
+    f.appendChild(s);
+  }
+})();
+
+(function tick(){
+  const el=document.getElementById('clocktxt');
+  const now=new Date();
+  el.textContent='ONLINE // '+now.toISOString().replace('T',' ').substring(0,19)+' UTC';
+  setTimeout(tick,1000);
+})();
+
+const cmd=document.getElementById('cmd');
+cmd.addEventListener('input',function(){
+  const l=cmd.value.length;
+  document.getElementById('charct').textContent=l+' / 1000';
+});
+cmd.addEventListener('keydown',function(e){
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();sendCommand();}
+});
+
+var SPECIES=[
+  {name:'Kitsari',district:'Lantern District',status:'active',icon:'🦊',color:'#FF9A3C',glow:'rgba(255,154,60,.35)',tag:'Clever. Radiant. Always selling.'},
+  {name:'Nubari',district:'Tempest Spire',status:'dormant',icon:'🐉',color:'#5B8CFF',glow:'rgba(91,140,255,.35)',tag:'Keeper of currents and chaos.'},
+  {name:'Miroku',district:'Reflection Basin',status:'dormant',icon:'🦢',color:'#C0F0FF',glow:'rgba(192,240,255,.35)',tag:'She sees what others miss.'},
+  {name:'Vorath',district:'Forge Hollows',status:'dormant',icon:'👹',color:'#FF4444',glow:'rgba(255,68,68,.35)',tag:'Brute force, refined.'},
+  {name:'Sylvex',district:'Mossgrave Forest',status:'dormant',icon:'🦝',color:'#7EC850',glow:'rgba(126,200,80,.35)',tag:'Ancient wisdom, modern hustle.'},
+  {name:'Lunara',district:'Eclipse Warrens',status:'dormant',icon:'🐇',color:'#D4AAFF',glow:'rgba(212,170,255,.35)',tag:'She moves between the dark seams.'},
+  {name:'Tessoku',district:'Ironwater Depths',status:'dormant',icon:'🐢',color:'#4ECDC4',glow:'rgba(78,205,196,.35)',tag:'Patience. Precision. Flood.'},
+  {name:'Pharex',district:'Aurum Sanctum',status:'locked',icon:'🦁',color:'#FFD700',glow:'rgba(255,215,0,.35)',tag:'The final guardian. Sealed.'}
+];
+
+(function(){
+  var grid=document.getElementById('registry');
+  SPECIES.forEach(function(s,i){
+    var c=document.createElement('div');
+    c.className='rcard'+(s.status==='active'?' active':'');
+    c.style.animationDelay=(i*.07)+'s';
+    c.innerHTML='<div class="rcglow" style="--sg:'+s.glow+'"></div><div class="ricon">'+s.icon+'</div><div class="rdist mono">'+s.district.toUpperCase()+'</div><div class="rname" style="color:'+s.color+'">'+s.name+'</div><div class="rtag">'+s.tag+'</div><div class="rstatus '+s.status+'"><span class="rpip"></span>'+s.status.toUpperCase()+'</div>';
+    grid.appendChild(c);
+  });
+})();
+
+function md(t){
+  return t
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g,'<em>$1</em>')
+    .replace(/^### (.+)$/gm,'<span style="font-family:\'Cinzel Decorative\',serif;font-size:.95rem;color:#b06aff;display:block;margin:.6rem 0 .2rem">$1</span>')
+    .replace(/^## (.+)$/gm,'<span style="font-family:\'Cinzel Decorative\',serif;font-size:1.05rem;color:#b06aff;display:block;margin:.75rem 0 .25rem">$1</span>')
+    .replace(/^# (.+)$/gm,'<span style="font-family:\'Cinzel Decorative\',serif;font-size:1.2rem;color:#b06aff;display:block;margin:.8rem 0 .3rem">$1</span>')
+    .replace(/^[-] (.+)$/gm,'<span style="display:block;padding-left:.9rem;margin:.1rem 0">✦ $1</span>')
+    .replace(/^\d+\. (.+)$/gm,'<span style="display:block;padding-left:.9rem;margin:.1rem 0">$1</span>')
+    .replace(/`([^`]+)`/g,'<code style="background:rgba(255,154,60,.1);border:1px solid rgba(255,154,60,.2);border-radius:4px;padding:.1em .35em;font-family:\'Share Tech Mono\',monospace;font-size:.82em">$1</code>')
+    .replace(/\n\n/g,'<br><br>')
+    .replace(/\n/g,'<br>');
+}
+
+var lastResp='';
+
+function sendCommand(){
+  var command=cmd.value.trim();
+  if(!command){showErr('Enter a command before transmitting.');return;}
+  hide('respanel');hide('errbox');
+  show('loading');
+  var btn=document.getElementById('sendbtn');
+  var lbl=document.getElementById('btnlbl');
+  btn.disabled=true;lbl.textContent='TRANSMITTING...';
+  fetch('/api/agent/kitsari',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:command})})
+    .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d};});})
+    .then(function(r){
+      hide('loading');btn.disabled=false;lbl.textContent='TRANSMIT';
+      if(!r.ok){showErr(r.data.error||'Transmission failed.');return;}
+      lastResp=r.data.response;
+      document.getElementById('resbody').innerHTML=md(r.data.response);
+      show('respanel');
+    })
+    .catch(function(){
+      hide('loading');btn.disabled=false;lbl.textContent='TRANSMIT';
+      showErr('Network error. Check server connection.');
+    });
+}
+
+function copyResp(){
+  if(!lastResp)return;
+  navigator.clipboard.writeText(lastResp).then(function(){
+    var b=document.getElementById('copybtn');var o=b.textContent;b.textContent='✓ COPIED';setTimeout(function(){b.textContent=o;},2000);
+  });
+}
+
+function show(id){document.getElementById(id).style.display=id==='loading'?'flex':'block';}
+function hide(id){document.getElementById(id).style.display='none';}
+function showErr(msg){document.getElementById('errtxt').textContent='⚠ '+msg;show('errbox');}
+</script>
+</body>
+</html>
