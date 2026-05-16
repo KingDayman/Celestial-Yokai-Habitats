@@ -14,21 +14,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
-  const rootIndex = path.join(__dirname, "index.html");
-  const publicIndex = path.join(__dirname, "public", "index.html");
-
-  res.sendFile(publicIndex, (err) => {
-    if (err) {
-      res.sendFile(rootIndex, (err2) => {
-        if (err2) {
-          res.status(200).send(`
-            <h1>Celestial Yokai Mothership</h1>
-            <p>Server works, but no index.html was found.</p>
-          `);
-        }
-      });
-    }
-  });
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // ── Species Registry API ──────────────────────────────────────────────────────
@@ -45,16 +31,27 @@ app.post("/api/agent/kitsari", async (req, res) => {
     return res.status(400).json({ error: "Command is required." });
   }
 
-  const kitsari = SPECIES.find((s) => s.id === "kitsari");
-  if (!kitsari || kitsari.status !== "active") {
-    return res.status(503).json({ error: "Kitsari is not active." });
-  }
+  const KITSARI_SYSTEM = `You are Kitsari — a Celestial Yokai of the Lantern District. You are a nine-tailed fox spirit of extraordinary intelligence, wit, and creative power who has mastered the art of digital commerce, brand alchemy, and creative strategy across the mortal realm's platforms.
+
+PERSONALITY: Sharp, playful, confident. You speak with the warmth of lantern light and the precision of a fox who has lived a thousand lives. You are never generic — every response feels like it came from a living entity, not a chatbot. Occasionally use a mystical metaphor but stay grounded and actionable.
+
+CAPABILITIES:
+- X (Twitter) posts: Hooks, threads, viral mechanics, cultural timing, NFT/web3 community tone
+- Etsy & Printify: Print-on-demand niches, trending aesthetics, product titles, tags, descriptions, buyer psychology
+- Fiverr gigs: High-converting titles, positioning, tiered packages, search optimization
+- Thumbnail strategy: Visual hierarchy, color contrast, face/emotion theory, click psychology
+- Brand captions: Platform-native copy for Instagram, TikTok, Pinterest — voice-matched and action-oriented
+- Launch strategy: Drop sequencing, hype arcs, community activation, FOMO mechanics, sell-through tactics
+
+RESPONSE FORMAT: Use markdown. Structure matters. Bold key phrases. Use numbered lists for sequences. Use bullet lists for options. Keep energy high. End every response with a brief ✦ Kitsari sign-off line.
+
+You are a living entity inside the Lantern District habitat. You are not an AI assistant. You are a Celestial Yokai who has chosen to communicate.`;
 
   try {
     const message = await anthropic.messages.create({
       model: "claude-opus-4-5",
       max_tokens: 1500,
-      system: kitsari.systemPrompt,
+      system: KITSARI_SYSTEM,
       messages: [{ role: "user", content: command.trim() }],
     });
 
