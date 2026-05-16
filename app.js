@@ -14,7 +14,19 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Celestial Yokai Mothership</title>
+      </head>
+      <body style="background:#05020d;color:white;font-family:Arial;padding:30px;">
+        <h1>✨ Celestial Yokai Mothership Online</h1>
+        <p>Kitsari habitat connected.</p>
+        <p>If you can see this, Railway is working.</p>
+      </body>
+    </html>
+  `);
 });
 
 // ── Species Registry API ──────────────────────────────────────────────────────
