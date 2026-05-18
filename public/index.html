@@ -734,33 +734,62 @@ function renderProductResult(data){
 let lastPrintifyProductId=null;
 
 async function createPrintifyDraft(aiText,btn){
-  btn.disabled=true;btn.innerHTML='Creating...';
-  setSyncStep('ss-printify','active','Creating Printify draft...');
+  btn.disabled=true;btn.innerHTML='Loading catalog...';
+  setSyncStep('ss-printify','active','Fetching Printify catalog...');
   habSignal('teal');
+  document.getElementById('gp-err').style.display='none';
 
-  const title=(parseSection(aiText,'PRODUCT NAME')||parseSection(aiText,'ETSY SEO TITLE')||'Celestial Yokai Product').split('\n')[0].slice(0,140);
+  const title=(parseSection(aiText,'PRODUCT NAME')||parseSection(aiText,'ETSY SEO TITLE')||'Celestial Yokai Product').split('\n')[0].replace(/\*\*/g,'').trim().slice(0,140);
   const desc=parseSection(aiText,'DESCRIPTION')||title;
-
-  // Blueprint map
-  const BPS={sticker:358,poster:6,shirt:12,hoodie:77,mug:19};
-  const blueprintId=BPS[currentPtype]||358;
+  const price=parsePriceFromText(aiText);
 
   try{
-    const r=await fetch('/api/printify/create-product',{
+    // Step 1: fetch catalog, resolve real blueprintId
+    setSyncStep('ss-printify','active','Step 1/3: Loading Printify catalog...');
+    const catRes=await fetch('/api/printify/catalog');
+    const cat=await catRes.json();
+    if(!catRes.ok)throw new Error(cat.error||'Catalog fetch failed');
+
+    const typeData=cat.supported?.[currentPtype];
+    if(!typeData||!typeData.found||!typeData.blueprintId){
+      const avail=Object.entries(cat.supported||{}).filter(([,v])=>v.found).map(([k,v])=>k+' (id='+v.blueprintId+')').join(', ');
+      throw new Error('No Printify blueprint found for "'+currentPtype+'". '+(avail?'Available: '+avail:'None found.')+ ' Catalog had '+(cat.totalBlueprints||0)+' blueprints. Check Railway logs.');
+    }
+
+    const blueprintId=typeData.blueprintId;
+    console.log('[Printify] blueprintId='+blueprintId+' "'+typeData.blueprintTitle+'" for type='+currentPtype);
+    setSyncStep('ss-printify','active','Step 2/3: Resolving provider for blueprint '+blueprintId+'...');
+
+    // Step 2: get real provider + variant
+    const infoRes=await fetch('/api/printify/blueprint-info?blueprintId='+blueprintId);
+    const info=await infoRes.json();
+    if(!infoRes.ok)throw new Error(info.error||'Blueprint info failed for id='+blueprintId);
+
+    const printProviderId=info.provider.id;
+    const variantId=info.variant.id;
+    console.log('[Printify] provider='+printProviderId+' "'+info.provider.title+'" variant='+variantId+' "'+info.variant.title+'"');
+    setSyncStep('ss-printify','active','Step 3/3: Creating product draft...');
+
+    // Step 3: create product with validated IDs
+    const createRes=await fetch('/api/printify/create-product',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({title,description:desc,blueprintId,price:parsePriceFromText(aiText)}),
+      body:JSON.stringify({title,description:desc,blueprintId,printProviderId,variantId,price}),
     });
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error||'Printify creation failed');
-    lastPrintifyProductId=d.printifyProductId;
-    btn.innerHTML='✓ PRINTIFY DRAFT CREATED';btn.style.borderColor='rgba(45,212,191,.4)';btn.style.color='var(--teal)';
-    setSyncStep('ss-printify','done',`Printify Draft Created ✓ (ID: ${d.printifyProductId})`);
+    const created=await createRes.json();
+    if(!createRes.ok)throw new Error(created.error||'Product creation failed');
+
+    lastPrintifyProductId=created.printifyProductId;
+    btn.innerHTML='\u2713 PRINTIFY DRAFT CREATED';
+    btn.style.borderColor='rgba(45,212,191,.4)';btn.style.color='var(--teal)';
+    setSyncStep('ss-printify','done','Printify Draft \u2713 id='+created.printifyProductId+' bp='+blueprintId+' prv='+printProviderId);
     habSignal('teal');
-    // Enable Etsy sync btn if Etsy connected
-    const eb=document.getElementById('btn-etsy-sync');if(eb&&etsyConnected)eb.disabled=false;
+    const eb=document.getElementById('btn-etsy-sync');
+    if(eb&&etsyConnected)eb.disabled=false;
+
   }catch(e){
-    btn.disabled=false;btn.innerHTML='🖨️ RETRY PRINTIFY';
-    setSyncStep('ss-printify','error','Printify failed: '+e.message);
+    console.error('[Printify]',e.message);
+    btn.disabled=false;btn.innerHTML='\uD83D\uDDA8\uFE0F RETRY PRINTIFY';
+    setSyncStep('ss-printify','error','Failed: '+e.message);
     showErr('gp-err',e.message);
   }
 }
