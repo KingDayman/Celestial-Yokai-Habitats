@@ -3,706 +3,583 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-<title>Kitsari Commerce Console — Celestial Night Market</title>
+<title>Kitsari Commerce Console v2 — Lantern District Market</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Noto+Serif+JP:wght@300;400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
 <style>
 :root{
-  --void:#030108;--deep:#07040f;--panel:rgba(11,6,22,.93);--glass:rgba(18,9,36,.75);
-  --pur:#9b5cf6;--pur2:#6d28d9;--purlo:rgba(155,92,246,.15);--purglow:rgba(155,92,246,.5);
+  --void:#030108;--deep:#07040f;--panel:rgba(11,6,22,.93);--glass:rgba(18,9,36,.78);
+  --pur:#9b5cf6;--pur2:#6d28d9;--purlo:rgba(155,92,246,.16);--purglow:rgba(155,92,246,.5);
   --fox:#c084fc;--foxglow:rgba(192,132,252,.4);
-  --gold:#e8c97a;--golddim:rgba(232,201,122,.18);--goldglow:rgba(232,201,122,.35);
-  --amber:#f59e0b;--amberdim:rgba(245,158,11,.15);
-  --cyan:#67e8f9;--teal:#14b8a6;
-  --red:#ff6b6b;--green:#4ade80;
-  --text:#e2d4f0;--dim:#7c6d8a;--muted:#3a3048;
-  --border:rgba(155,92,246,.2);--borderdim:rgba(255,255,255,.06);--bordergold:rgba(232,201,122,.22);
+  --gold:#e8c97a;--golddim:rgba(232,201,122,.14);--goldglow:rgba(232,201,122,.4);--goldbright:#f5dfa0;
+  --amber:#f59e0b;--amberdim:rgba(245,158,11,.14);
+  --teal:#2dd4bf;--tealdim:rgba(45,212,191,.12);
+  --red:#ff6b6b;--green:#4ade80;--greendim:rgba(74,222,128,.1);
+  --text:#e8d8f8;--dim:#7c6d8a;--muted:#3a3048;
+  --border:rgba(155,92,246,.2);--borderdim:rgba(255,255,255,.06);
+  --bordergold:rgba(232,201,122,.22);--borderteal:rgba(45,212,191,.2);
   --r:10px;--rl:16px;
-  --fd:'Cinzel Decorative',serif;
-  --fb:'Noto Serif JP',serif;
-  --fm:'Share Tech Mono',monospace;
+  --fd:'Cinzel Decorative',serif;--fb:'Noto Serif JP',serif;--fm:'Share Tech Mono',monospace;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{background:var(--void);color:var(--text);font-family:var(--fb);-webkit-text-size-adjust:100%;scroll-behavior:smooth}
-body{min-height:100vh;overflow-x:hidden;padding-bottom:calc(env(safe-area-inset-bottom) + 1rem)}
+body{min-height:100vh;overflow-x:hidden;padding-bottom:calc(env(safe-area-inset-bottom)+1rem)}
 button,textarea,input,select{font-family:var(--fb)}
 button{cursor:pointer;border:none;background:none}
 ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--void)}::-webkit-scrollbar-thumb{background:var(--purlo);border-radius:2px}
+body::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.022;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:180px}
 
-/* ── noise overlay ── */
-body::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.025;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:180px;}
-
-/* ═══ GATE ════════════════════════════════════════════════ */
-#gate{position:fixed;inset:0;z-index:9999;background:radial-gradient(ellipse at 50% 40%,#0f0520 0%,#030108 72%);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;text-align:center;padding:2rem;
+/* ═══ GATE ═══════════════════════════════════════════════════ */
+#gate{position:fixed;inset:0;z-index:9999;background:radial-gradient(ellipse at 50% 40%,#100528 0%,#030108 70%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2rem;text-align:center;padding:2rem;
   transition:opacity 1.2s,visibility 1.2s}
 #gate.out{opacity:0;visibility:hidden;pointer-events:none}
-.gate-runes{font-size:1.2rem;letter-spacing:.5em;opacity:.25;animation:rune-d 6s ease-in-out infinite}
-@keyframes rune-d{0%,100%{letter-spacing:.5em;opacity:.25}50%{letter-spacing:.7em;opacity:.45}}
-.gate-sigil{font-size:3.8rem;filter:drop-shadow(0 0 28px rgba(155,92,246,.8));animation:gspin 6s ease-in-out infinite}
-@keyframes gspin{0%,100%{transform:scale(1);filter:drop-shadow(0 0 28px rgba(155,92,246,.8))}50%{transform:scale(1.07);filter:drop-shadow(0 0 50px rgba(192,132,252,1))}}
-.gate-title{font-family:var(--fd);font-size:clamp(1.3rem,5.5vw,2.1rem);font-weight:900;color:#fff;text-shadow:0 0 50px var(--purglow);line-height:1.2;letter-spacing:.03em}
-.gate-sub{font-family:var(--fm);font-size:.65rem;color:var(--dim);letter-spacing:.18em}
-.gate-warn{font-family:var(--fm);font-size:.62rem;color:rgba(232,201,122,.55);letter-spacing:.1em;animation:flk 4s ease infinite}
-@keyframes flk{0%,100%{opacity:.55}48%{opacity:.55}52%{opacity:.1}88%{opacity:.55}92%{opacity:.1}}
-.gate-btn{margin-top:.5rem;padding:.75rem 2.2rem;background:linear-gradient(135deg,rgba(155,92,246,.12),rgba(109,40,217,.22));
-  border:1px solid rgba(155,92,246,.45);border-radius:var(--r);
-  font-family:var(--fm);font-size:.78rem;color:#c084fc;letter-spacing:.2em;
-  box-shadow:0 0 20px rgba(155,92,246,.12);transition:all .3s}
-.gate-btn:hover{background:linear-gradient(135deg,rgba(155,92,246,.28),rgba(109,40,217,.38));box-shadow:0 0 40px rgba(155,92,246,.4);transform:translateY(-2px)}
+.gate-runes{font-size:1.1rem;letter-spacing:.5em;opacity:.22;animation:rd 6s ease-in-out infinite}
+@keyframes rd{0%,100%{letter-spacing:.5em;opacity:.22}50%{letter-spacing:.7em;opacity:.42}}
+.gate-lantern{font-size:4rem;filter:drop-shadow(0 0 28px rgba(232,201,122,.75));animation:gl 4s ease-in-out infinite}
+@keyframes gl{0%,100%{filter:drop-shadow(0 0 28px rgba(232,201,122,.75))}50%{filter:drop-shadow(0 0 55px rgba(232,201,122,1))}}
+.gate-title{font-family:var(--fd);font-size:clamp(1.25rem,5vw,2rem);font-weight:900;color:#fff;text-shadow:0 0 50px var(--goldglow),0 0 100px rgba(232,201,122,.1);line-height:1.2}
+.gate-sub{font-family:var(--fm);font-size:.62rem;color:var(--dim);letter-spacing:.18em}
+.gate-warn{font-family:var(--fm);font-size:.6rem;color:rgba(232,201,122,.5);letter-spacing:.1em;animation:flk 4s ease infinite}
+@keyframes flk{0%,100%{opacity:.5}48%{opacity:.5}52%{opacity:.1}90%{opacity:.5}93%{opacity:.1}}
+.gate-btn{padding:.75rem 2.2rem;background:linear-gradient(135deg,rgba(232,201,122,.12),rgba(180,140,60,.2));border:1px solid rgba(232,201,122,.4);border-radius:var(--r);font-family:var(--fm);font-size:.76rem;color:var(--gold);letter-spacing:.2em;box-shadow:0 0 20px rgba(232,201,122,.1);transition:all .3s}
+.gate-btn:hover{background:linear-gradient(135deg,rgba(232,201,122,.25),rgba(180,140,60,.35));box-shadow:0 0 40px rgba(232,201,122,.35);transform:translateY(-2px)}
 
-/* ═══ CANVASES ════════════════════════════════════════════ */
+/* ═══ CANVASES ════════════════════════════════════════════════ */
 #bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none}
 #fx-canvas{position:fixed;inset:0;z-index:2;pointer-events:none}
 
-/* ═══ LAYOUT ══════════════════════════════════════════════ */
+/* ═══ APP ════════════════════════════════════════════════════ */
 #app{position:relative;z-index:10;max-width:780px;margin:0 auto;padding:0 1rem 4rem;opacity:0;transition:opacity 1s}
 #app.show{opacity:1}
 
-/* ═══ HEADER ══════════════════════════════════════════════ */
-.hdr{text-align:center;padding:2.2rem 1rem 1.8rem;border-bottom:1px solid var(--border);margin-bottom:2rem;position:relative}
-.hdr::after{content:'';position:absolute;bottom:-1px;left:15%;right:15%;height:1px;background:linear-gradient(90deg,transparent,var(--pur),var(--gold),var(--pur),transparent)}
-.hdr-badge{display:inline-flex;align-items:center;gap:.5rem;background:rgba(232,201,122,.06);border:1px solid var(--bordergold);border-radius:20px;padding:.28rem .9rem;margin-bottom:.9rem}
+/* ═══ HEADER ════════════════════════════════════════════════ */
+.hdr{text-align:center;padding:2rem 1rem 1.8rem;border-bottom:1px solid var(--bordergold);margin-bottom:2rem;position:relative}
+.hdr::after{content:'';position:absolute;bottom:-1px;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,var(--gold),var(--pur),var(--gold),transparent)}
+.hdr-badge{display:inline-flex;align-items:center;gap:.5rem;background:rgba(232,201,122,.06);border:1px solid var(--bordergold);border-radius:20px;padding:.25rem .9rem;margin-bottom:.85rem}
 .hdr-pip{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);animation:pip 2.5s ease-in-out infinite}
 @keyframes pip{0%,100%{opacity:1}50%{opacity:.2}}
-.hdr-badge-txt{font-family:var(--fm);font-size:.56rem;color:var(--gold);letter-spacing:.18em}
-.hdr-title{font-family:var(--fd);font-size:clamp(1.3rem,5.5vw,2.2rem);font-weight:900;color:#fff;line-height:1.15;letter-spacing:.03em;text-shadow:0 0 60px var(--purglow),0 0 120px rgba(155,92,246,.12)}
-.hdr-sub{font-family:var(--fm);font-size:.72rem;color:var(--gold);margin-top:.4rem;letter-spacing:.1em;opacity:.7}
-.hdr-clock{font-family:var(--fm);font-size:.55rem;color:var(--dim);margin-top:.3rem;letter-spacing:.08em}
+.hdr-badge-txt{font-family:var(--fm);font-size:.54rem;color:var(--gold);letter-spacing:.18em}
+.hdr-title{font-family:var(--fd);font-size:clamp(1.2rem,5vw,2rem);font-weight:900;color:#fff;line-height:1.15;letter-spacing:.03em;text-shadow:0 0 60px var(--goldglow),0 0 40px var(--purglow)}
+.hdr-version{font-family:var(--fm);font-size:.56rem;color:rgba(232,201,122,.45);letter-spacing:.2em;margin-top:.2rem}
+.hdr-sub{font-family:var(--fm);font-size:.68rem;color:var(--dim);margin-top:.3rem;letter-spacing:.1em}
+.hdr-clock{font-family:var(--fm);font-size:.52rem;color:var(--muted);margin-top:.25rem;letter-spacing:.07em}
 
-/* ═══ SECTION LABEL ═══════════════════════════════════════ */
-.slbl{display:flex;align-items:center;gap:.7rem;font-family:var(--fm);font-size:.56rem;color:var(--gold);letter-spacing:.25em;margin-bottom:1.1rem}
+/* ═══ ETSY STATUS BAR ════════════════════════════════════════ */
+#etsy-status-bar{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;
+  background:rgba(0,0,0,.4);border:1px solid var(--borderdim);border-radius:var(--r);
+  padding:.6rem .9rem;margin-bottom:1.5rem;backdrop-filter:blur(4px);
+}
+.esb-left{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.esb-label{font-family:var(--fm);font-size:.56rem;color:var(--dim);letter-spacing:.12em}
+.conn-pill{display:inline-flex;align-items:center;gap:.3rem;padding:.18rem .55rem;border-radius:20px;font-family:var(--fm);font-size:.52rem;letter-spacing:.12em;transition:all .4s}
+.conn-pill.disconnected{background:rgba(255,107,107,.07);border:1px solid rgba(255,107,107,.22);color:var(--red)}
+.conn-pill.pending{background:var(--golddim);border:1px solid rgba(232,201,122,.25);color:var(--gold);animation:flk 3s ease infinite}
+.conn-pill.connected{background:var(--greendim);border:1px solid rgba(74,222,128,.25);color:var(--green)}
+.conn-pill.unconfigured{background:rgba(155,92,246,.06);border:1px solid var(--border);color:var(--pur)}
+.pill-dot{width:4px;height:4px;border-radius:50%;background:currentColor}
+.esb-right{display:flex;gap:.4rem;align-items:center}
+.connect-btn-sm{padding:.35rem .85rem;border-radius:7px;font-family:var(--fm);font-size:.58rem;letter-spacing:.1em;border:1px solid var(--bordergold);color:var(--gold);background:rgba(232,201,122,.08);transition:all .2s}
+.connect-btn-sm:hover:not(:disabled){background:rgba(232,201,122,.18);box-shadow:0 0 12px rgba(232,201,122,.15)}
+.connect-btn-sm:disabled{opacity:.38;cursor:not-allowed}
+.connect-btn-sm.connected-state{border-color:rgba(74,222,128,.3);color:var(--green);background:var(--greendim)}
+
+/* ═══ SECTION LABEL ══════════════════════════════════════════ */
+.slbl{display:flex;align-items:center;gap:.7rem;font-family:var(--fm);font-size:.54rem;color:var(--gold);letter-spacing:.25em;margin-bottom:1rem}
 .slbl::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--bordergold),transparent)}
 
-/* ═══ HABITAT BLOCK ═══════════════════════════════════════ */
-.habitat-wrap{position:relative;border-radius:var(--rl);overflow:hidden;border:1px solid var(--border);margin-bottom:1.5rem;box-shadow:0 0 60px rgba(155,92,246,.1),0 0 120px rgba(155,92,246,.05)}
-.habitat-canvas-container{position:relative;width:100%;height:200px;overflow:hidden;background:linear-gradient(180deg,#08031a 0%,#110829 50%,#0d0a1a 100%)}
-@media(min-width:480px){.habitat-canvas-container{height:240px}}
+/* ═══ HABITAT ════════════════════════════════════════════════ */
+.habitat-wrap{border-radius:var(--rl);overflow:hidden;border:1px solid var(--bordergold);margin-bottom:1.5rem;box-shadow:0 0 60px rgba(232,201,122,.07),0 0 120px rgba(155,92,246,.05)}
+.hc-box{position:relative;width:100%;height:210px;overflow:hidden;background:linear-gradient(180deg,#060118 0%,#110830 50%,#0d0a1a 100%)}
+@media(min-width:480px){.hc-box{height:250px}}
 #habitat-canvas{width:100%;height:100%;display:block}
-.hab-ot{position:absolute;top:0;left:0;right:0;height:50px;background:linear-gradient(180deg,rgba(3,1,8,.85),transparent);pointer-events:none}
-.hab-ob{position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(0deg,rgba(3,1,8,.95),transparent);pointer-events:none}
-.hab-lbl{position:absolute;top:.7rem;left:.9rem;font-family:var(--fm);font-size:.5rem;color:rgba(232,201,122,.6);letter-spacing:.18em}
-.hab-stat{position:absolute;top:.7rem;right:.9rem;display:flex;align-items:center;gap:.3rem}
-.hab-dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pip 2s ease infinite}
-.hab-txt{font-family:var(--fm);font-size:.48rem;color:rgba(74,222,128,.7);letter-spacing:.14em}
-.hab-flash{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 90%,rgba(232,201,122,.2) 0%,transparent 60%);transition:opacity .7s}
-.hab-flash.on{opacity:1}
+.hc-ot{position:absolute;top:0;left:0;right:0;height:48px;background:linear-gradient(180deg,rgba(3,1,8,.9),transparent);pointer-events:none}
+.hc-ob{position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(0deg,rgba(3,1,8,.95),transparent);pointer-events:none}
+.hc-lbl{position:absolute;top:.65rem;left:.9rem;font-family:var(--fm);font-size:.48rem;color:rgba(232,201,122,.55);letter-spacing:.18em}
+.hc-stat{position:absolute;top:.65rem;right:.9rem;display:flex;align-items:center;gap:.3rem}
+.hc-dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pip 2s ease infinite}
+.hc-dot.gold{background:var(--gold);box-shadow:0 0 6px var(--gold)}
+.hc-txt{font-family:var(--fm);font-size:.46rem;color:rgba(74,222,128,.7);letter-spacing:.14em}
+.hc-flash{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .6s}
+.hc-flash.gold-f{background:radial-gradient(ellipse at 50% 90%,rgba(232,201,122,.22) 0%,transparent 65%)}
+.hc-flash.pur-f{background:radial-gradient(ellipse at 50% 90%,rgba(155,92,246,.22) 0%,transparent 65%)}
+.hc-flash.on{opacity:1}
 
-/* ═══ NAV TABS ════════════════════════════════════════════ */
-.nav-tabs{display:flex;gap:0;margin-bottom:1.5rem;background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden}
-.nav-tab{flex:1;padding:.65rem .3rem;text-align:center;font-family:var(--fm);font-size:.58rem;letter-spacing:.08em;color:var(--dim);transition:all .25s;border-right:1px solid var(--borderdim);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:.2rem}
+/* ═══ NAV TABS ═══════════════════════════════════════════════ */
+.nav-tabs{display:flex;gap:0;margin-bottom:1.5rem;background:rgba(0,0,0,.45);border:1px solid var(--borderdim);border-radius:var(--rl);overflow:hidden}
+.nav-tab{flex:1;padding:.62rem .25rem;text-align:center;font-family:var(--fm);font-size:.54rem;letter-spacing:.06em;color:var(--dim);transition:all .22s;border-right:1px solid var(--borderdim);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:.18rem;-webkit-tap-highlight-color:transparent}
 .nav-tab:last-child{border-right:none}
-.nav-tab .t-icon{font-size:1.1rem}
+.nav-tab .ti{font-size:1rem}
 .nav-tab:hover{color:var(--fox);background:rgba(155,92,246,.06)}
-.nav-tab.active{background:linear-gradient(180deg,rgba(155,92,246,.15),rgba(109,40,217,.08));color:var(--fox);border-bottom:2px solid var(--pur)}
+.nav-tab.active{background:linear-gradient(180deg,rgba(232,201,122,.1),rgba(155,92,246,.07));color:var(--gold);border-bottom:2px solid var(--gold)}
 
-/* ═══ PANELS ══════════════════════════════════════════════ */
-.panel{display:none}
-.panel.active{display:block}
+/* ═══ PANELS ════════════════════════════════════════════════ */
+.panel{display:none}.panel.active{display:block;animation:fin .3s ease both}
+@keyframes fin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
-/* ═══ KITSARI CARD ════════════════════════════════════════ */
-.k-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--rl);padding:1.25rem;margin-bottom:1.25rem;position:relative;overflow:hidden;backdrop-filter:blur(6px)}
-.k-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--pur),var(--gold),transparent)}
-.k-glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 0%,rgba(155,92,246,.07) 0%,transparent 60%)}
+/* ═══ CARD BASE ══════════════════════════════════════════════ */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--rl);padding:1.2rem;margin-bottom:1.1rem;position:relative;overflow:hidden;backdrop-filter:blur(6px)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold),var(--pur),transparent);opacity:.5}
+.card-glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 0%,rgba(155,92,246,.065) 0%,transparent 60%)}
+.card-gold{border-color:var(--bordergold)}
+.card-gold::before{background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+
+/* ═══ KITSARI IDENTITY ═══════════════════════════════════════ */
 .k-top{display:flex;align-items:flex-start;gap:1rem;margin-bottom:1.1rem}
 .k-portrait{position:relative;flex-shrink:0}
-.k-portrait img,.k-portrait-fallback{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid rgba(192,132,252,.4);box-shadow:0 0 18px rgba(155,92,246,.4)}
-.k-portrait-fallback{display:none;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(155,92,246,.3),rgba(4,2,10,.8));font-size:1.8rem}
+.k-portrait img,.k-fb{width:70px;height:70px;border-radius:50%;object-fit:cover;border:2px solid rgba(192,132,252,.4);box-shadow:0 0 18px rgba(155,92,246,.4)}
+.k-fb{display:none;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(155,92,246,.3),rgba(4,2,10,.9));font-size:1.7rem}
 .k-ring{position:absolute;inset:-4px;border-radius:50%;border:1px solid transparent;
-  background:conic-gradient(rgba(192,132,252,0) 0deg,rgba(192,132,252,.6) 120deg,rgba(232,201,122,.4) 200deg,rgba(192,132,252,0) 280deg,rgba(192,132,252,.5) 360deg) border-box;
-  -webkit-mask:linear-gradient(#fff 0 0) padding-box,linear-gradient(#fff 0 0);-webkit-mask-composite:destination-out;mask-composite:exclude;
-  animation:spin 9s linear infinite}
+  background:conic-gradient(rgba(232,201,122,0) 0deg,rgba(232,201,122,.6) 100deg,rgba(192,132,252,.5) 200deg,rgba(232,201,122,0) 300deg,rgba(232,201,122,.4) 360deg) border-box;
+  -webkit-mask:linear-gradient(#fff 0 0) padding-box,linear-gradient(#fff 0 0);-webkit-mask-composite:destination-out;mask-composite:exclude;animation:spin 10s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .k-meta{flex:1;min-width:0}
-.k-dist{font-family:var(--fm);font-size:.5rem;letter-spacing:.2em;color:var(--gold);margin-bottom:.18rem}
-.k-name{font-family:var(--fd);font-size:1.5rem;font-weight:700;color:#fff;text-shadow:0 0 18px var(--foxglow);line-height:1.1}
-.k-tag{font-size:.76rem;color:var(--dim);font-style:italic;margin-top:.18rem}
-.k-badge{display:flex;align-items:center;gap:.3rem;background:rgba(74,222,128,.07);border:1px solid rgba(74,222,128,.22);border-radius:20px;padding:.2rem .6rem;align-self:flex-start;flex-shrink:0}
-.k-badge-dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pip 2s ease infinite}
-.k-badge-txt{font-family:var(--fm);font-size:.48rem;color:#4ade80;letter-spacing:.14em}
+.k-district{font-family:var(--fm);font-size:.49rem;letter-spacing:.2em;color:var(--gold);margin-bottom:.16rem}
+.k-name{font-family:var(--fd);font-size:1.45rem;font-weight:700;color:#fff;text-shadow:0 0 18px var(--foxglow);line-height:1.1}
+.k-tagline{font-size:.74rem;color:var(--dim);font-style:italic;margin-top:.16rem;line-height:1.4}
+.k-badge{display:flex;align-items:center;gap:.3rem;background:var(--greendim);border:1px solid rgba(74,222,128,.22);border-radius:20px;padding:.2rem .6rem;align-self:flex-start;flex-shrink:0}
+.k-badge-dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:pip 2s ease infinite}
+.k-badge-txt{font-family:var(--fm);font-size:.47rem;color:var(--green);letter-spacing:.14em}
 
-/* ═══ QUICK ACTION BUTTONS ════════════════════════════════ */
-.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-bottom:1.25rem}
-@media(min-width:500px){.qa-grid{grid-template-columns:repeat(3,1fr)}}
-.qa-btn{
-  padding:.65rem .5rem;border-radius:var(--r);
-  border:1px solid var(--borderdim);background:rgba(0,0,0,.35);
-  font-family:var(--fm);font-size:.6rem;letter-spacing:.07em;color:var(--dim);
-  display:flex;flex-direction:column;align-items:center;gap:.3rem;
-  transition:all .25s;text-align:center;backdrop-filter:blur(4px);
-}
-.qa-btn .qa-icon{font-size:1.2rem}
+/* ═══ QUICK ACTIONS ══════════════════════════════════════════ */
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1.1rem}
+@media(min-width:500px){.qa-grid.three{grid-template-columns:repeat(3,1fr)}}
+.qa-btn{padding:.62rem .4rem;border-radius:var(--r);border:1px solid var(--borderdim);background:rgba(0,0,0,.38);font-family:var(--fm);font-size:.56rem;letter-spacing:.06em;color:var(--dim);display:flex;flex-direction:column;align-items:center;gap:.28rem;transition:all .22s;text-align:center;backdrop-filter:blur(4px);-webkit-tap-highlight-color:transparent}
+.qa-btn .qi{font-size:1.1rem}
 .qa-btn:hover{border-color:var(--border);color:var(--fox);background:rgba(155,92,246,.08);transform:translateY(-1px)}
-.qa-btn.gold{border-color:var(--bordergold);color:var(--gold)}
-.qa-btn.gold:hover{border-color:rgba(232,201,122,.5);background:rgba(232,201,122,.07)}
-.qa-btn:disabled,.qa-btn.pending{opacity:.45;cursor:not-allowed;transform:none}
+.qa-btn.gold-btn{border-color:var(--bordergold);color:var(--gold);background:var(--golddim)}
+.qa-btn.gold-btn:hover{border-color:rgba(232,201,122,.5);background:rgba(232,201,122,.1)}
 
-/* ═══ TERMINAL ════════════════════════════════════════════ */
-.terminal{background:rgba(0,0,0,.5);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;backdrop-filter:blur(6px)}
-.t-bar{display:flex;justify-content:space-between;align-items:center;padding:.5rem .85rem;background:rgba(155,92,246,.05);border-bottom:1px solid var(--border)}
-.t-bar-l{font-family:var(--fm);font-size:.56rem;color:var(--fox);letter-spacing:.12em}
-.t-mode{display:inline-block;padding:.08rem .38rem;border-radius:4px;background:var(--purlo);border:1px solid var(--border);font-family:var(--fm);font-size:.46rem;color:var(--pur);letter-spacing:.1em}
-textarea.t-input{width:100%;background:transparent;border:none;outline:none;color:var(--text);font-family:var(--fb);font-size:.88rem;line-height:1.7;padding:.85rem;resize:none;min-height:84px}
-textarea.t-input::placeholder{color:var(--muted);font-style:italic;font-size:.82rem}
-.t-foot{display:flex;justify-content:space-between;align-items:center;padding:.5rem .85rem;border-top:1px solid var(--borderdim)}
-.t-charct{font-family:var(--fm);font-size:.53rem;color:var(--muted)}
-.t-send{display:flex;align-items:center;gap:.4rem;background:linear-gradient(135deg,#7c3aed,#5b21b6);border-radius:8px;padding:.48rem 1.1rem;font-family:var(--fm);font-size:.66rem;color:#e9d5ff;letter-spacing:.14em;font-weight:700;box-shadow:0 0 18px rgba(124,58,237,.3);transition:all .25s;border:1px solid rgba(167,139,250,.25)}
+/* ═══ TERMINAL ═══════════════════════════════════════════════ */
+.terminal{background:rgba(0,0,0,.52);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;backdrop-filter:blur(6px)}
+.t-bar{display:flex;justify-content:space-between;align-items:center;padding:.48rem .85rem;background:rgba(155,92,246,.05);border-bottom:1px solid var(--border)}
+.t-bar-l{font-family:var(--fm);font-size:.54rem;color:var(--fox);letter-spacing:.12em}
+.t-mode-badge{display:inline-block;padding:.07rem .35rem;border-radius:4px;background:var(--purlo);border:1px solid var(--border);font-family:var(--fm);font-size:.44rem;color:var(--pur);letter-spacing:.1em}
+.t-input{width:100%;background:transparent;border:none;outline:none;color:var(--text);font-family:var(--fb);font-size:.88rem;line-height:1.7;padding:.82rem;resize:none;min-height:82px}
+.t-input::placeholder{color:var(--muted);font-style:italic;font-size:.82rem}
+.t-foot{display:flex;justify-content:space-between;align-items:center;padding:.48rem .85rem;border-top:1px solid var(--borderdim)}
+.t-charct{font-family:var(--fm);font-size:.5rem;color:var(--muted)}
+.t-send{display:flex;align-items:center;gap:.4rem;background:linear-gradient(135deg,#7c3aed,#5b21b6);border-radius:8px;padding:.46rem 1.1rem;font-family:var(--fm);font-size:.64rem;color:#e9d5ff;letter-spacing:.14em;font-weight:700;box-shadow:0 0 18px rgba(124,58,237,.28);transition:all .22s;border:1px solid rgba(167,139,250,.22)}
 .t-send:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 0 32px rgba(124,58,237,.55)}
 .t-send:disabled{opacity:.38;transform:none}
+.t-send.gold-send{background:linear-gradient(135deg,#b45309,#92400e);border-color:rgba(232,201,122,.3);box-shadow:0 0 18px rgba(180,83,9,.3)}
+.t-send.gold-send:hover:not(:disabled){box-shadow:0 0 32px rgba(232,201,122,.45)}
 
-/* ═══ RESPONSE ════════════════════════════════════════════ */
-.res-wrap{display:none;margin-top:.9rem;border-radius:var(--r);overflow:hidden;animation:fin .4s ease both}
-@keyframes fin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.res-bar{display:flex;justify-content:space-between;align-items:center;padding:.45rem .85rem;background:rgba(232,201,122,.04);border:1px solid var(--bordergold);border-bottom:none;border-radius:var(--r) var(--r) 0 0}
-.res-bar-l{font-family:var(--fm);font-size:.55rem;color:var(--gold);letter-spacing:.12em}
-.res-acts{display:flex;gap:.35rem}
-.res-act{background:none;border:1px solid var(--borderdim);border-radius:4px;color:var(--dim);font-family:var(--fm);font-size:.52rem;padding:.14rem .42rem;letter-spacing:.08em;transition:all .2s}
-.res-act:hover{border-color:var(--border);color:var(--fox)}
-.res-body{padding:.95rem;font-size:.88rem;line-height:1.8;color:var(--text);background:rgba(6,3,14,.75);border:1px solid rgba(232,201,122,.14);border-top:none;border-radius:0 0 var(--r) var(--r);backdrop-filter:blur(4px)}
-.res-body strong{color:var(--fox)}
-.res-body em{color:var(--dim)}
-.res-line{display:block;opacity:0;transform:translateY(3px);animation:li .28s ease forwards}
-@keyframes li{to{opacity:1;transform:translateY(0)}}
-.res-sig{display:inline-block;font-family:var(--fm);font-size:.55rem;color:var(--gold);margin-top:.55rem;letter-spacing:.1em;opacity:.7}
-
-/* ═══ LOADING ══════════════════════════════════════════════ */
-.loading{display:none;align-items:center;gap:.8rem;padding:.85rem 0}
+/* ═══ LOADING ════════════════════════════════════════════════ */
+.loading{display:none;align-items:center;gap:.8rem;padding:.82rem 0}
 .orbs{display:flex;gap:.3rem}
 .orb{width:6px;height:6px;border-radius:50%;background:var(--pur);animation:ob 1.3s ease-in-out infinite}
 .orb:nth-child(2){animation-delay:.2s}.orb:nth-child(3){animation-delay:.4s}
 @keyframes ob{0%,100%{transform:translateY(0);opacity:.2;box-shadow:none}50%{transform:translateY(-7px);opacity:1;box-shadow:0 0 8px var(--pur)}}
-.load-txt{font-family:var(--fm);font-size:.6rem;color:var(--dim);letter-spacing:.1em;animation:flk 3s ease infinite}
+.orb.gold-orb{background:var(--gold)}
+.orb.gold-orb:nth-child(2n){animation-delay:.2s}.orb.gold-orb:nth-child(3n){animation-delay:.4s}
+.load-txt{font-family:var(--fm);font-size:.58rem;color:var(--dim);letter-spacing:.1em;animation:flk 3s ease infinite}
 
-/* ═══ ERROR ════════════════════════════════════════════════ */
-.err-box{display:none;margin-top:.8rem;background:rgba(255,107,107,.06);border:1px solid rgba(255,107,107,.22);border-radius:var(--r);padding:.65rem .85rem;font-family:var(--fm);font-size:.72rem;color:var(--red);letter-spacing:.04em}
+/* ═══ RESPONSE ═══════════════════════════════════════════════ */
+.res-wrap{display:none;margin-top:.9rem;border-radius:var(--r);overflow:hidden}
+.res-bar{display:flex;justify-content:space-between;align-items:center;padding:.44rem .85rem;background:rgba(232,201,122,.04);border:1px solid var(--bordergold);border-bottom:none;border-radius:var(--r) var(--r) 0 0}
+.res-bar-l{font-family:var(--fm);font-size:.53rem;color:var(--gold);letter-spacing:.12em}
+.res-acts{display:flex;gap:.32rem}
+.res-act{background:none;border:1px solid var(--borderdim);border-radius:4px;color:var(--dim);font-family:var(--fm);font-size:.5rem;padding:.13rem .4rem;letter-spacing:.08em;transition:all .18s}
+.res-act:hover{border-color:var(--border);color:var(--fox)}
+.res-body{padding:.92rem;font-size:.86rem;line-height:1.82;color:var(--text);background:rgba(6,3,14,.78);border:1px solid rgba(232,201,122,.14);border-top:none;border-radius:0 0 var(--r) var(--r);backdrop-filter:blur(4px)}
+.res-body strong{color:var(--fox)}.res-body em{color:var(--dim)}
+.res-line{display:block;opacity:0;transform:translateY(3px);animation:li .25s ease forwards}
+@keyframes li{to{opacity:1;transform:translateY(0)}}
+.res-sig{display:inline-block;font-family:var(--fm);font-size:.52rem;color:var(--gold);margin-top:.5rem;letter-spacing:.1em;opacity:.65}
 
-/* ═══ STATUS PILL ═════════════════════════════════════════ */
-.status-pill{display:inline-flex;align-items:center;gap:.3rem;padding:.18rem .55rem;border-radius:20px;font-family:var(--fm);font-size:.5rem;letter-spacing:.12em}
-.status-pill.pending{background:rgba(232,201,122,.06);border:1px solid rgba(232,201,122,.2);color:var(--gold)}
-.status-pill.connected{background:rgba(74,222,128,.07);border:1px solid rgba(74,222,128,.22);color:var(--green)}
-.status-pill.offline{background:rgba(155,92,246,.06);border:1px solid var(--border);color:var(--pur)}
-.pill-dot{width:4px;height:4px;border-radius:50%;background:currentColor}
+/* ═══ ERROR ══════════════════════════════════════════════════ */
+.err-box{display:none;margin-top:.7rem;background:rgba(255,107,107,.06);border:1px solid rgba(255,107,107,.22);border-radius:var(--r);padding:.6rem .85rem;font-family:var(--fm);font-size:.7rem;color:var(--red);letter-spacing:.04em}
 
-/* ═══ SOCIAL SHRINE PANEL ════════════════════════════════ */
-.shrine-grid{display:grid;gap:.65rem;margin-bottom:1.25rem}
-.shrine-card{background:rgba(11,6,22,.8);border:1px solid var(--borderdim);border-radius:var(--r);padding:1rem;position:relative;overflow:hidden;transition:border-color .25s,transform .25s;cursor:pointer}
-.shrine-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(155,92,246,.3),transparent);opacity:0;transition:opacity .3s}
+/* ═══ FORM ═══════════════════════════════════════════════════ */
+.f-group{margin-bottom:.75rem}
+.f-lbl{font-family:var(--fm);font-size:.52rem;color:var(--dim);letter-spacing:.14em;display:block;margin-bottom:.28rem}
+.f-input,.f-select,.f-textarea{width:100%;background:rgba(0,0,0,.48);border:1px solid var(--borderdim);border-radius:var(--r);color:var(--text);font-family:var(--fb);font-size:.84rem;padding:.5rem .72rem;outline:none;transition:border-color .18s}
+.f-input:focus,.f-select:focus,.f-textarea:focus{border-color:var(--border)}
+.f-input::placeholder,.f-textarea::placeholder{color:var(--muted);font-style:italic}
+.f-textarea{resize:none;min-height:66px;line-height:1.6}
+.f-select{appearance:none;-webkit-appearance:none;cursor:pointer}
+.f-select option{background:#1a0d38;color:var(--text)}
+.f-row{display:grid;grid-template-columns:1fr 1fr;gap:.55rem}
+@media(max-width:400px){.f-row{grid-template-columns:1fr}}
+
+/* ═══ SCROLL CARD (draft/listing result) ═════════════════════ */
+.scroll-card{background:rgba(232,201,122,.025);border:1px solid var(--bordergold);border-radius:var(--r);overflow:hidden;margin-top:.85rem;animation:fin .4s ease both}
+.sc-top{display:flex;justify-content:space-between;align-items:center;padding:.55rem .85rem;background:rgba(232,201,122,.04);border-bottom:1px solid rgba(232,201,122,.1)}
+.sc-title{font-family:var(--fm);font-size:.54rem;color:var(--gold);letter-spacing:.1em}
+.sc-acts{display:flex;gap:.3rem}
+.sc-act{background:none;border:1px solid var(--borderdim);border-radius:4px;color:var(--dim);font-family:var(--fm);font-size:.5rem;padding:.12rem .38rem;letter-spacing:.07em;transition:all .18s}
+.sc-act:hover{border-color:var(--bordergold);color:var(--gold)}
+.sc-body{padding:.88rem;font-size:.84rem;line-height:1.8;color:var(--text);word-break:break-word}
+.sc-body strong{color:var(--fox)}.sc-body em{color:var(--dim)}
+.sc-line{display:block;opacity:0;animation:li .25s ease forwards}
+
+/* publish lock banner */
+.pub-lock{margin-top:.7rem;background:rgba(232,201,122,.04);border:1px solid var(--bordergold);border-radius:var(--r);padding:.6rem .85rem;font-family:var(--fm);font-size:.58rem;color:var(--gold);letter-spacing:.06em;line-height:1.5}
+.pub-lock::before{content:'🔒 ';font-size:.8rem}
+
+/* etsy push btn */
+.push-btn{margin-top:.6rem;display:flex;align-items:center;gap:.4rem;background:linear-gradient(135deg,rgba(232,201,122,.14),rgba(180,140,60,.2));border:1px solid rgba(232,201,122,.4);border-radius:8px;padding:.46rem 1rem;font-family:var(--fm);font-size:.62rem;color:var(--gold);letter-spacing:.12em;transition:all .22s}
+.push-btn:hover:not(:disabled){background:linear-gradient(135deg,rgba(232,201,122,.25),rgba(180,140,60,.35));box-shadow:0 0 16px rgba(232,201,122,.2)}
+.push-btn:disabled{opacity:.38;cursor:not-allowed}
+
+/* ═══ SHRINE CARDS ════════════════════════════════════════════ */
+.shrine-grid{display:grid;gap:.55rem;margin-bottom:1.1rem}
+.shrine-card{background:rgba(11,6,22,.82);border:1px solid var(--borderdim);border-radius:var(--r);padding:.9rem;position:relative;overflow:hidden;transition:all .22s;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.shrine-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--purlo),transparent);opacity:0;transition:opacity .28s}
 .shrine-card:hover::before{opacity:1}
 .shrine-card:hover{border-color:var(--border);transform:translateY(-1px)}
-.sc-icon{font-size:1.5rem;margin-bottom:.4rem}
-.sc-title{font-family:var(--fd);font-size:.82rem;font-weight:700;color:var(--fox);margin-bottom:.25rem}
-.sc-desc{font-size:.73rem;color:var(--dim);line-height:1.55}
+.sc-icon{font-size:1.4rem;margin-bottom:.35rem}
+.sc-name{font-family:var(--fd);font-size:.78rem;font-weight:700;color:var(--fox);margin-bottom:.2rem}
+.sc-desc{font-size:.7rem;color:var(--dim);line-height:1.5}
 
-/* ═══ MARKET PANEL ════════════════════════════════════════ */
-.market-section{margin-bottom:1.5rem}
-.market-connect-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem;background:rgba(0,0,0,.35);border:1px solid var(--borderdim);border-radius:var(--r);padding:.7rem .9rem;margin-bottom:1rem}
-.connect-info{display:flex;flex-direction:column;gap:.25rem}
-.connect-name{font-family:var(--fm);font-size:.62rem;color:var(--text);letter-spacing:.1em}
-.connect-btn{padding:.38rem .9rem;border-radius:7px;font-family:var(--fm);font-size:.6rem;letter-spacing:.12em;border:1px solid var(--border);color:var(--fox);background:rgba(155,92,246,.1);transition:all .2s}
-.connect-btn:hover{background:rgba(155,92,246,.2);box-shadow:0 0 12px rgba(155,92,246,.2)}
-.connect-btn:disabled{opacity:.4;cursor:not-allowed}
-
-/* ═══ FORM FIELDS ═════════════════════════════════════════ */
-.form-group{margin-bottom:.8rem}
-.form-label{font-family:var(--fm);font-size:.55rem;color:var(--dim);letter-spacing:.14em;display:block;margin-bottom:.3rem}
-.form-input,.form-select,.form-textarea{
-  width:100%;background:rgba(0,0,0,.45);border:1px solid var(--borderdim);border-radius:var(--r);
-  color:var(--text);font-family:var(--fb);font-size:.85rem;padding:.55rem .75rem;outline:none;
-  transition:border-color .2s;
-}
-.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--border)}
-.form-textarea{resize:none;min-height:72px;line-height:1.6}
-.form-select{appearance:none;-webkit-appearance:none;cursor:pointer}
-.form-select option{background:#1a0d38;color:var(--text)}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
-@media(max-width:400px){.form-row{grid-template-columns:1fr}}
-
-/* ═══ DRAFT CARD ══════════════════════════════════════════ */
-.draft-stack{display:flex;flex-direction:column;gap:.6rem;margin-top:.9rem}
-.draft-card{background:rgba(232,201,122,.03);border:1px solid var(--bordergold);border-radius:var(--r);padding:.85rem;position:relative;overflow:hidden;animation:fin .4s ease both}
-.draft-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem}
-.draft-title{font-family:var(--fm);font-size:.6rem;color:var(--gold);letter-spacing:.1em}
-.draft-meta{font-family:var(--fm);font-size:.5rem;color:var(--muted);letter-spacing:.08em}
-.draft-body{font-size:.8rem;color:var(--dim);line-height:1.6;white-space:pre-wrap;word-break:break-word}
-
-/* ═══ LUNAR LEDGER ════════════════════════════════════════ */
-.ledger-header{text-align:center;padding:1.5rem 1rem;margin-bottom:1.25rem;border-bottom:1px solid var(--borderdim)}
-.ledger-title{font-family:var(--fd);font-size:1.3rem;color:var(--gold);text-shadow:0 0 20px var(--goldglow)}
-.ledger-sub{font-family:var(--fm);font-size:.58rem;color:var(--dim);letter-spacing:.15em;margin-top:.4rem}
-.ledger-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:1.25rem}
-@media(min-width:500px){.ledger-grid{grid-template-columns:repeat(3,1fr)}}
-.stat-card{background:rgba(11,6,22,.85);border:1px solid var(--borderdim);border-radius:var(--r);padding:.9rem;text-align:center;position:relative;overflow:hidden;transition:border-color .2s}
+/* ═══ LUNAR LEDGER ════════════════════════════════════════════ */
+.ledger-hero{text-align:center;padding:1.3rem;margin-bottom:1.1rem;background:var(--golddim);border:1px solid var(--bordergold);border-radius:var(--rl)}
+.ledger-icon{font-size:2.2rem;margin-bottom:.5rem;filter:drop-shadow(0 0 12px var(--goldglow))}
+.ledger-title{font-family:var(--fd);font-size:1.15rem;color:var(--gold);text-shadow:0 0 16px var(--goldglow)}
+.ledger-sub{font-family:var(--fm);font-size:.56rem;color:var(--dim);letter-spacing:.15em;margin-top:.35rem}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-bottom:1.1rem}
+@media(min-width:500px){.stat-grid{grid-template-columns:repeat(3,1fr)}}
+.stat-card{background:rgba(11,6,22,.85);border:1px solid var(--borderdim);border-radius:var(--r);padding:.85rem;text-align:center;position:relative;overflow:hidden;transition:border-color .22s}
 .stat-card:hover{border-color:var(--border)}
-.stat-card::before{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--stat-color,var(--pur));opacity:.3}
-.stat-icon{font-size:1.3rem;margin-bottom:.3rem}
-.stat-label{font-family:var(--fm);font-size:.5rem;color:var(--muted);letter-spacing:.14em;margin-bottom:.25rem}
-.stat-value{font-family:var(--fd);font-size:1.2rem;color:var(--stat-color,var(--fox));text-shadow:0 0 12px rgba(192,132,252,.3)}
-.stat-note{font-family:var(--fm);font-size:.48rem;color:var(--muted);margin-top:.15rem}
-.ledger-pending{background:rgba(155,92,246,.04);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;text-align:center;margin-bottom:1.25rem}
-.ledger-pending-icon{font-size:2rem;margin-bottom:.6rem}
-.ledger-pending-title{font-family:var(--fd);font-size:.9rem;color:var(--fox);margin-bottom:.35rem}
-.ledger-pending-txt{font-size:.78rem;color:var(--dim);line-height:1.6}
-.best-product-card{background:rgba(232,201,122,.03);border:1px solid var(--bordergold);border-radius:var(--r);padding:.9rem;margin-bottom:.65rem}
-.bp-label{font-family:var(--fm);font-size:.52rem;color:var(--gold);letter-spacing:.15em;margin-bottom:.5rem}
-.bp-placeholder{font-family:var(--fm);font-size:.7rem;color:var(--muted);letter-spacing:.08em;text-align:center;padding:.6rem;border:1px dashed var(--borderdim);border-radius:8px}
+.stat-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--sc,var(--pur));opacity:.35}
+.stat-icon{font-size:1.2rem;margin-bottom:.28rem}
+.stat-label{font-family:var(--fm);font-size:.48rem;color:var(--muted);letter-spacing:.14em;margin-bottom:.22rem}
+.stat-value{font-family:var(--fd);font-size:1.15rem;color:var(--sc,var(--fox))}
+.stat-note{font-family:var(--fm);font-size:.46rem;color:var(--muted);margin-top:.12rem}
+.empty-state{background:rgba(155,92,246,.04);border:1px solid var(--border);border-radius:var(--r);padding:1.1rem;text-align:center;margin-bottom:1.1rem}
+.empty-icon{font-size:1.8rem;margin-bottom:.5rem;opacity:.5}
+.empty-title{font-family:var(--fd);font-size:.88rem;color:var(--fox);margin-bottom:.3rem}
+.empty-txt{font-size:.76rem;color:var(--dim);line-height:1.55}
+.health-grid{display:grid;gap:.5rem;margin-bottom:1.1rem}
+.health-row{display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,.35);border:1px solid var(--borderdim);border-radius:var(--r);padding:.65rem .9rem}
+.hr-left{display:flex;flex-direction:column;gap:.2rem}
+.hr-name{font-family:var(--fm);font-size:.58rem;color:var(--text);letter-spacing:.1em}
+.hr-detail{font-family:var(--fm);font-size:.48rem;color:var(--muted);letter-spacing:.07em}
+.draft-count-badge{background:var(--purlo);border:1px solid var(--border);border-radius:var(--r);padding:.5rem .85rem;text-align:center;margin-bottom:.55rem}
+.dcb-num{font-family:var(--fd);font-size:1.6rem;color:var(--pur)}
+.dcb-label{font-family:var(--fm);font-size:.5rem;color:var(--dim);letter-spacing:.14em;margin-top:.15rem}
 
-/* ═══ SCROLL-CARD MARKET LISTINGS ════════════════════════ */
-.scroll-cards{display:grid;gap:.6rem;margin-top:.9rem}
-.scroll-card{background:rgba(232,201,122,.025);border:1px solid var(--bordergold);border-radius:var(--r);overflow:hidden;animation:fin .4s ease both}
-.scroll-card-top{display:flex;justify-content:space-between;align-items:center;padding:.6rem .85rem;background:rgba(232,201,122,.04);border-bottom:1px solid rgba(232,201,122,.1)}
-.scroll-card-title{font-family:var(--fm);font-size:.58rem;color:var(--gold);letter-spacing:.1em}
-.scroll-card-body{padding:.85rem;font-size:.82rem;color:var(--dim);line-height:1.7;white-space:pre-wrap;word-break:break-word}
-.scroll-card-body strong{color:var(--fox)}
-
-/* ═══ MUTE BTN ════════════════════════════════════════════ */
-#mute-btn{position:fixed;bottom:calc(1rem + env(safe-area-inset-bottom));right:1rem;z-index:100;width:36px;height:36px;border-radius:50%;background:rgba(11,6,22,.9);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.85rem;transition:all .2s;backdrop-filter:blur(8px)}
-#mute-btn:hover{border-color:var(--pur);box-shadow:0 0 12px var(--purlo)}
-
-/* ═══ DIVIDER ══════════════════════════════════════════════ */
-.divider{height:1px;background:linear-gradient(90deg,transparent,var(--borderdim),transparent);margin:1.1rem 0}
-
-/* ═══ FOOTER ══════════════════════════════════════════════ */
-footer{text-align:center;padding:1.3rem 1rem;border-top:1px solid var(--borderdim);position:relative;z-index:10}
-.ft-txt{font-family:var(--fm);font-size:.5rem;color:var(--muted);letter-spacing:.18em}
-.ft-runes{font-size:.75rem;letter-spacing:.3em;opacity:.18;margin-top:.35rem}
+/* ═══ MUTE BTN ════════════════════════════════════════════════ */
+#mute-btn{position:fixed;bottom:calc(1rem + env(safe-area-inset-bottom));right:1rem;z-index:100;width:36px;height:36px;border-radius:50%;background:rgba(11,6,22,.92);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.85rem;transition:all .2s;backdrop-filter:blur(8px)}
+#mute-btn:hover{border-color:var(--gold);box-shadow:0 0 12px var(--golddim)}
+footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdim);position:relative;z-index:10}
+.ft{font-family:var(--fm);font-size:.48rem;color:var(--muted);letter-spacing:.17em}
+.ft-r{font-size:.7rem;letter-spacing:.28em;opacity:.15;margin-top:.3rem}
 </style>
 </head>
 <body>
 
-<!-- GATE -->
 <div id="gate">
-  <div class="gate-runes">⛩ ✦ 狐 ✦ ⛩</div>
-  <div class="gate-sigil">🏮</div>
-  <h1 class="gate-title">Kitsari Commerce Console<br><span style="font-size:.65em;opacity:.7">Celestial Night Market</span></h1>
-  <p class="gate-sub">LANTERN DISTRICT // MARKET UPLINK // STANDBY</p>
+  <div class="gate-runes">⛩ ✦ 狐 ✦ 商 ✦ ⛩</div>
+  <div class="gate-lantern">🏮</div>
+  <h1 class="gate-title">Kitsari Commerce Console<br><span style="font-size:.62em;opacity:.65">Lantern District Market</span></h1>
+  <p class="gate-sub">v2 // ETSY + PRINTIFY + CLAUDE // LANTERN DISTRICT</p>
   <p class="gate-warn">✦ ENTERING ACTIVE COMMERCE HABITAT ✦</p>
   <button class="gate-btn" onclick="enterRealm()">⟩ OPEN THE MARKET</button>
-  <div class="gate-runes" style="font-size:.85rem;margin-top:.4rem">鬼 龍 影 精 星 商</div>
+  <div class="gate-runes" style="font-size:.82rem;margin-top:.3rem">鬼 龍 影 精 星 商 法</div>
 </div>
 
-<!-- CANVASES -->
 <canvas id="bg-canvas"></canvas>
 <canvas id="fx-canvas"></canvas>
-<button id="mute-btn" onclick="toggleMute()">🔇</button>
+<button id="mute-btn" onclick="toggleMute()" title="Ambient sound">🔇</button>
 
-<!-- APP -->
 <div id="app">
 
-  <!-- HEADER -->
   <header class="hdr">
-    <div class="hdr-badge">
-      <span class="hdr-pip"></span>
-      <span class="hdr-badge-txt">COMMERCE CONSOLE v1 // LANTERN DISTRICT // LIVE</span>
-    </div>
+    <div class="hdr-badge"><span class="hdr-pip"></span><span class="hdr-badge-txt">COMMERCE CONSOLE v2 // LANTERN DISTRICT MARKET // LIVE</span></div>
     <h1 class="hdr-title">Kitsari Commerce Console</h1>
-    <p class="hdr-sub">✦ Celestial Night Market — Lantern District ✦</p>
+    <div class="hdr-version">✦ v2 — Etsy + Printify + Claude ✦</div>
+    <p class="hdr-sub">Lantern District Market</p>
     <p class="hdr-clock" id="clock"></p>
   </header>
 
-  <div id="app-inner">
+  <!-- ETSY STATUS BAR -->
+  <div id="etsy-status-bar">
+    <div class="esb-left">
+      <span class="esb-label">ETSY</span>
+      <span class="conn-pill disconnected" id="etsy-pill"><span class="pill-dot"></span>DISCONNECTED</span>
+      <span id="etsy-shop-name" style="font-family:var(--fm);font-size:.52rem;color:var(--gold);display:none"></span>
+      <span style="width:1px;height:12px;background:var(--borderdim);margin:0 .2rem"></span>
+      <span class="esb-label">PRINTIFY</span>
+      <span class="conn-pill disconnected" id="printify-pill"><span class="pill-dot"></span>CHECKING...</span>
+    </div>
+    <div class="esb-right">
+      <button class="connect-btn-sm" id="etsy-conn-btn" onclick="connectEtsy()">CONNECT ETSY</button>
+      <button class="connect-btn-sm" id="etsy-disc-btn" onclick="disconnectEtsy()" style="display:none;border-color:rgba(255,107,107,.3);color:var(--red)">DISCONNECT</button>
+    </div>
+  </div>
 
-    <!-- HABITAT -->
-    <div class="habitat-wrap">
-      <div class="habitat-canvas-container">
-        <canvas id="habitat-canvas"></canvas>
-        <div class="hab-ot"></div><div class="hab-ob"></div>
-        <div class="hab-lbl">KITSARI // LANTERN DISTRICT // NIGHT MARKET ACTIVE</div>
-        <div class="hab-stat"><span class="hab-dot"></span><span class="hab-txt">MARKET OPEN</span></div>
-        <div class="hab-flash" id="hab-flash"></div>
+  <!-- HABITAT -->
+  <div class="habitat-wrap">
+    <div class="hc-box">
+      <canvas id="habitat-canvas"></canvas>
+      <div class="hc-ot"></div><div class="hc-ob"></div>
+      <div class="hc-lbl">KITSARI // LANTERN DISTRICT MARKET // NIGHT MARKET ACTIVE</div>
+      <div class="hc-stat"><span class="hc-dot" id="hc-dot"></span><span class="hc-txt" id="hc-txt">MARKET OPEN</span></div>
+      <div class="hc-flash gold-f" id="hab-flash"></div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="switchTab('shrine',this)"><span class="ti">⛩️</span>SOCIAL SHRINE</div>
+    <div class="nav-tab" onclick="switchTab('market',this)"><span class="ti">🏮</span>CELESTIAL MARKET</div>
+    <div class="nav-tab" onclick="switchTab('ledger',this)"><span class="ti">📊</span>LUNAR LEDGER</div>
+  </div>
+
+  <!-- ═══ SOCIAL SHRINE ═══ -->
+  <div class="panel active" id="panel-shrine">
+    <div class="card">
+      <div class="card-glow"></div>
+      <div class="k-top">
+        <div class="k-portrait">
+          <img src="/kitsari.png" alt="Kitsari" onerror="this.style.display='none';document.getElementById('kfb').style.display='flex'"/>
+          <div class="k-fb" id="kfb">🦊</div>
+          <div class="k-ring"></div>
+        </div>
+        <div class="k-meta">
+          <div class="k-district">SOCIAL SHRINE // TRANSMISSION CENTER</div>
+          <div class="k-name">Kitsari</div>
+          <div class="k-tagline">Lantern District Market operator. Every post lands like fire from the sky.</div>
+        </div>
+        <div class="k-badge"><span class="k-badge-dot"></span><span class="k-badge-txt">ACTIVE</span></div>
       </div>
+
+      <div class="qa-grid three">
+        <button class="qa-btn" onclick="setMode('xpost')"><span class="qi">𝕏</span>X POST</button>
+        <button class="qa-btn" onclick="setMode('lore')"><span class="qi">📜</span>LORE POST</button>
+        <button class="qa-btn" onclick="setMode('campaign')"><span class="qi">⚔️</span>CAMPAIGN</button>
+        <button class="qa-btn" onclick="setMode('launch')"><span class="qi">🚀</span>LAUNCH POST</button>
+        <button class="qa-btn" onclick="setMode('engagement')"><span class="qi">💬</span>ENGAGEMENT</button>
+        <button class="qa-btn" onclick="setMode('open')"><span class="qi">📡</span>OPEN CHANNEL</button>
+      </div>
+
+      <div class="terminal">
+        <div class="t-bar">
+          <span class="t-bar-l">⟩ SHRINE TERMINAL</span>
+          <span class="t-mode-badge" id="shrine-mode-lbl">OPEN CHANNEL</span>
+        </div>
+        <textarea class="t-input" id="shrine-cmd" rows="4" maxlength="1000" placeholder="Speak your intent..."></textarea>
+        <div class="t-foot">
+          <span class="t-charct" id="shrine-charct">0/1000</span>
+          <button class="t-send" id="shrine-send" onclick="transmitShrine()">TRANSMIT ✦</button>
+        </div>
+      </div>
+      <div class="loading" id="shrine-loading"><div class="orbs"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div><span class="load-txt" id="shrine-load-txt">Kitsari channels the signal...</span></div>
+      <div class="res-wrap" id="shrine-res"><div class="res-bar"><span class="res-bar-l">⟩ SHRINE RESPONSE</span><div class="res-acts"><button class="res-act" onclick="copyEl('shrine-body')">⎘ COPY</button><button class="res-act" onclick="hideEl('shrine-res')">✕</button></div></div><div class="res-body" id="shrine-body"></div></div>
+      <div class="err-box" id="shrine-err"></div>
     </div>
 
-    <!-- NAV TABS -->
-    <div class="nav-tabs">
-      <div class="nav-tab active" onclick="switchTab('shrine',this)">
-        <span class="t-icon">⛩️</span>
-        <span>SOCIAL SHRINE</span>
-      </div>
-      <div class="nav-tab" onclick="switchTab('market',this)">
-        <span class="t-icon">🏮</span>
-        <span>CELESTIAL MARKET</span>
-      </div>
-      <div class="nav-tab" onclick="switchTab('ledger',this)">
-        <span class="t-icon">📜</span>
-        <span>LUNAR LEDGER</span>
-      </div>
+    <p class="slbl">✦ TRANSMISSION TYPES</p>
+    <div class="shrine-grid">
+      <div class="shrine-card" onclick="setMode('xpost')"><div class="sc-icon">𝕏</div><div class="sc-name">X Posts &amp; Threads</div><div class="sc-desc">Scroll-stopping posts, threads, and drop announcements tuned for the collector community.</div></div>
+      <div class="shrine-card" onclick="setMode('lore')"><div class="sc-icon">📜</div><div class="sc-name">Lore &amp; Myth</div><div class="sc-desc">World-building transmissions and celestial mythology that build universe depth.</div></div>
+      <div class="shrine-card" onclick="setMode('campaign')"><div class="sc-icon">⚔️</div><div class="sc-name">Campaign Planning</div><div class="sc-desc">5-day drop arcs, hype sequences, FOMO mechanics, community activation strategies.</div></div>
+      <div class="shrine-card" onclick="setMode('engagement')"><div class="sc-icon">💬</div><div class="sc-name">Engagement Ideas</div><div class="sc-desc">Comment bait, polls, reply hooks, and community games that grow the Lantern District following.</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ CELESTIAL MARKET ═══ -->
+  <div class="panel" id="panel-market">
+
+    <p class="slbl">✦ MARKET ACTIONS</p>
+    <div class="qa-grid" style="grid-template-columns:1fr 1fr;margin-bottom:1.1rem">
+      <button class="qa-btn gold-btn" onclick="openForm('draft')"><span class="qi">📋</span>DRAFT LISTING</button>
+      <button class="qa-btn gold-btn" onclick="openForm('idea')"><span class="qi">💡</span>PRODUCT IDEA</button>
+      <button class="qa-btn" onclick="openForm('scan')"><span class="qi">📡</span>MARKET SIGNAL SCAN</button>
+      <button class="qa-btn" onclick="openForm('launch-mkt')"><span class="qi">🚀</span>LAUNCH POST</button>
     </div>
 
-    <!-- ═══ SOCIAL SHRINE PANEL ═══ -->
-    <div class="panel active" id="panel-shrine">
-
-      <!-- Kitsari card -->
-      <div class="k-card">
-        <div class="k-glow"></div>
-        <div class="k-top">
-          <div class="k-portrait">
-            <img src="/kitsari.png" alt="Kitsari" onerror="this.style.display='none';document.getElementById('kfb').style.display='flex'"/>
-            <div class="k-portrait-fallback" id="kfb">🦊</div>
-            <div class="k-ring"></div>
-          </div>
-          <div class="k-meta">
-            <div class="k-dist">SOCIAL SHRINE // TRANSMISSION CENTER</div>
-            <div class="k-name">Kitsari</div>
-            <div class="k-tag">Your celestial social strategist. Every word lands like a lantern dropped from the sky.</div>
-          </div>
-          <div class="k-badge"><span class="k-badge-dot"></span><span class="k-badge-txt">ACTIVE</span></div>
+    <!-- DRAFT LISTING FORM -->
+    <div id="form-draft" class="card card-gold" style="display:none">
+      <div class="card-glow"></div>
+      <p class="slbl">📋 DRAFT LISTING — KITSARI WORKFLOW</p>
+      <div class="f-group"><label class="f-lbl">CONCEPT / PRODUCT IDEA *</label><textarea class="f-textarea" id="dl-concept" placeholder="e.g. Nine-tailed fox spirit guarding a celestial shrine at moonrise..."></textarea></div>
+      <div class="f-row">
+        <div class="f-group"><label class="f-lbl">PRODUCT TYPE</label>
+          <select class="f-select" id="dl-type">
+            <option value="art print">Art Print</option><option value="t-shirt">T-Shirt</option>
+            <option value="hoodie">Hoodie</option><option value="sticker sheet">Sticker Sheet</option>
+            <option value="tote bag">Tote Bag</option><option value="enamel pin">Enamel Pin</option>
+            <option value="mug">Mug</option><option value="phone case">Phone Case</option>
+          </select>
         </div>
-
-        <!-- Quick actions -->
-        <div class="qa-grid">
-          <button class="qa-btn" onclick="quickAction('shrine','xpost')">
-            <span class="qa-icon">𝕏</span>LAUNCH POST
-          </button>
-          <button class="qa-btn" onclick="quickAction('shrine','lore')">
-            <span class="qa-icon">📜</span>LORE CONTENT
-          </button>
-          <button class="qa-btn" onclick="quickAction('shrine','campaign')">
-            <span class="qa-icon">⚔️</span>CAMPAIGN PLAN
-          </button>
-        </div>
-
-        <!-- Terminal -->
-        <div class="terminal">
-          <div class="t-bar">
-            <span class="t-bar-l">⟩ SHRINE TRANSMISSION</span>
-            <span class="t-mode" id="shrine-mode-lbl">OPEN CHANNEL</span>
-          </div>
-          <textarea class="t-input" id="shrine-cmd" rows="4" maxlength="1000"
-            placeholder="Describe your drop, campaign, or lore transmission..."></textarea>
-          <div class="t-foot">
-            <span class="t-charct" id="shrine-charct">0/1000</span>
-            <button class="t-send" id="shrine-send" onclick="transmitShrine()">TRANSMIT ✦</button>
-          </div>
-        </div>
-
-        <div class="loading" id="shrine-loading">
-          <div class="orbs"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
-          <span class="load-txt" id="shrine-load-txt">Kitsari channels the signal...</span>
-        </div>
-        <div class="res-wrap" id="shrine-res">
-          <div class="res-bar">
-            <span class="res-bar-l">⟩ SHRINE RESPONSE</span>
-            <div class="res-acts">
-              <button class="res-act" onclick="copyRes('shrine-body')">⎘ COPY</button>
-              <button class="res-act" onclick="clearRes('shrine-res')">✕</button>
-            </div>
-          </div>
-          <div class="res-body" id="shrine-body"></div>
-        </div>
-        <div class="err-box" id="shrine-err"></div>
+        <div class="f-group"><label class="f-lbl">TARGET BUYER</label><input type="text" class="f-input" id="dl-buyer" placeholder="anime fans, NFT collectors..."/></div>
       </div>
-
-      <!-- Type cards -->
-      <p class="slbl">✦ TRANSMISSION TYPES</p>
-      <div class="shrine-grid">
-        <div class="shrine-card" onclick="setShrine('xpost')">
-          <div class="sc-icon">𝕏</div>
-          <div class="sc-title">X Launch Posts</div>
-          <div class="sc-desc">Scroll-stopping posts, threads, and drop announcements tuned for the NFT and art collector community.</div>
-        </div>
-        <div class="shrine-card" onclick="setShrine('campaign')">
-          <div class="sc-icon">⚔️</div>
-          <div class="sc-title">Campaign Planning</div>
-          <div class="sc-desc">5-day drop arcs, hype sequences, FOMO mechanics, and community activation strategies.</div>
-        </div>
-        <div class="shrine-card" onclick="setShrine('lore')">
-          <div class="sc-icon">📜</div>
-          <div class="sc-title">Lore Content</div>
-          <div class="sc-desc">World-building transmissions, mythology drops, and celestial story threads that build universe depth.</div>
-        </div>
+      <div class="f-group"><label class="f-lbl">NFT UTILITY ANGLE</label><input type="text" class="f-input" id="dl-nft" placeholder="trait-based variant, holder discount, early access..."/></div>
+      <div class="t-foot" style="padding:0;margin-top:.5rem;border-top:none">
+        <button class="res-act" onclick="closeForm('draft')">✕ CLOSE</button>
+        <button class="t-send gold-send" onclick="runDraftListing()">GENERATE DRAFT ✦</button>
       </div>
+      <div class="loading" id="dl-loading"><div class="orbs"><div class="orb gold-orb"></div><div class="orb gold-orb"></div><div class="orb gold-orb"></div></div><span class="load-txt">Kitsari inscribes the sacred scroll...</span></div>
+      <div id="dl-result"></div>
+      <div class="err-box" id="dl-err"></div>
     </div>
 
-    <!-- ═══ CELESTIAL MARKET PANEL ═══ -->
-    <div class="panel" id="panel-market">
-
-      <!-- Connect bar -->
-      <div class="market-section">
-        <p class="slbl">✦ MARKET CONNECTIONS</p>
-        <div class="market-connect-bar">
-          <div class="connect-info">
-            <span class="connect-name">ETSY MARKETPLACE</span>
-            <span class="status-pill pending" id="etsy-pill"><span class="pill-dot"></span>AWAITING API APPROVAL</span>
-          </div>
-          <button class="connect-btn" id="etsy-connect-btn" onclick="connectEtsy()" disabled>CONNECT ETSY</button>
-        </div>
-        <div class="market-connect-bar">
-          <div class="connect-info">
-            <span class="connect-name">PRINTIFY CATALOG</span>
-            <span class="status-pill offline" id="printify-pill"><span class="pill-dot"></span>CHECKING...</span>
-          </div>
-          <button class="connect-btn" id="printify-connect-btn" onclick="connectPrintify()">CONNECT PRINTIFY</button>
+    <!-- PRODUCT IDEA FORM -->
+    <div id="form-idea" class="card" style="display:none">
+      <div class="card-glow"></div>
+      <p class="slbl">💡 GENERATE PRODUCT IDEAS</p>
+      <div class="f-group"><label class="f-lbl">NICHE / THEME</label><input type="text" class="f-input" id="pi-niche" placeholder="celestial yokai, dark cosmic, mystical anime..."/></div>
+      <div class="f-row">
+        <div class="f-group"><label class="f-lbl">VISUAL STYLE</label><input type="text" class="f-input" id="pi-style" placeholder="glowing, ethereal, gold and purple..."/></div>
+        <div class="f-group"><label class="f-lbl">PRODUCT TYPE</label>
+          <select class="f-select" id="pi-medium">
+            <option value="">Any</option><option value="art prints">Art Prints</option>
+            <option value="apparel">Apparel</option><option value="stickers">Stickers</option>
+            <option value="accessories">Accessories</option><option value="home decor">Home Decor</option>
+          </select>
         </div>
       </div>
-
-      <!-- Quick action buttons -->
-      <p class="slbl">✦ MARKET ACTIONS</p>
-      <div class="qa-grid" style="grid-template-columns:1fr 1fr;margin-bottom:1.25rem">
-        <button class="qa-btn gold" onclick="openMarketAction('idea')">
-          <span class="qa-icon">💡</span>GENERATE PRODUCT IDEA
-        </button>
-        <button class="qa-btn gold" onclick="openMarketAction('listing')">
-          <span class="qa-icon">📋</span>DRAFT ETSY LISTING
-        </button>
-        <button class="qa-btn" onclick="openMarketAction('launch')">
-          <span class="qa-icon">🚀</span>CREATE LAUNCH POST
-        </button>
-        <button class="qa-btn" onclick="switchTab('ledger',document.querySelectorAll('.nav-tab')[2])">
-          <span class="qa-icon">📊</span>VIEW LUNAR LEDGER
-        </button>
+      <div class="t-foot" style="padding:0;margin-top:.5rem;border-top:none">
+        <button class="res-act" onclick="closeForm('idea')">✕ CLOSE</button>
+        <button class="t-send" onclick="runProductIdea()">GENERATE ✦</button>
       </div>
+      <div class="loading" id="pi-loading"><div class="orbs"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div><span class="load-txt">Kitsari searches the celestial catalog...</span></div>
+      <div class="res-wrap" id="pi-res"><div class="res-bar"><span class="res-bar-l">✦ PRODUCT IDEAS</span><div class="res-acts"><button class="res-act" onclick="copyEl('pi-body')">⎘ COPY</button><button class="res-act" onclick="hideEl('pi-res')">✕</button></div></div><div class="res-body" id="pi-body"></div></div>
+      <div class="err-box" id="pi-err"></div>
+    </div>
 
-      <!-- PRODUCT IDEA FORM -->
-      <div id="market-idea-form" style="display:none" class="k-card">
-        <div class="k-glow"></div>
-        <p class="slbl">💡 GENERATE PRODUCT IDEA</p>
-        <div class="form-group">
-          <label class="form-label">NICHE / THEME</label>
-          <input type="text" class="form-input" id="idea-niche" placeholder="celestial yokai, mystical anime, dark cosmic..."/>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">VISUAL STYLE</label>
-            <input type="text" class="form-input" id="idea-style" placeholder="glowing, ethereal, dark..."/>
-          </div>
-          <div class="form-group">
-            <label class="form-label">MEDIUM PREFERENCE</label>
-            <select class="form-select" id="idea-medium">
-              <option value="">Any product type</option>
-              <option value="art prints">Art Prints</option>
-              <option value="apparel">Apparel (shirts, hoodies)</option>
-              <option value="stickers">Sticker Sheets</option>
-              <option value="accessories">Accessories</option>
-              <option value="home decor">Home Decor</option>
-            </select>
-          </div>
-        </div>
-        <div class="t-foot" style="padding:0;margin-top:.5rem">
-          <button class="res-act" onclick="closeMarketAction('idea')">✕ CLOSE</button>
-          <button class="t-send" onclick="runProductIdea()">GENERATE ✦</button>
-        </div>
-        <div class="loading" id="idea-loading">
-          <div class="orbs"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
-          <span class="load-txt">Kitsari searches the celestial catalog...</span>
-        </div>
-        <div class="res-wrap" id="idea-res" style="margin-top:.9rem">
-          <div class="res-bar"><span class="res-bar-l">✦ PRODUCT IDEAS</span><div class="res-acts"><button class="res-act" onclick="copyRes('idea-body')">⎘ COPY</button><button class="res-act" onclick="clearRes('idea-res')">✕</button></div></div>
-          <div class="res-body" id="idea-body"></div>
-        </div>
-        <div class="err-box" id="idea-err"></div>
+    <!-- MARKET SCAN FORM -->
+    <div id="form-scan" class="card" style="display:none">
+      <div class="card-glow"></div>
+      <p class="slbl">📡 MARKET SIGNAL SCAN</p>
+      <div class="f-row">
+        <div class="f-group"><label class="f-lbl">CATEGORY</label><input type="text" class="f-input" id="ms-cat" placeholder="mystical art prints, yokai merch..."/></div>
+        <div class="f-group"><label class="f-lbl">PRICE RANGE</label><select class="f-select" id="ms-price"><option value="$5-$20">$5-$20</option><option value="$15-$40" selected>$15-$40</option><option value="$30-$75">$30-$75</option><option value="$50-$150">$50-$150</option></select></div>
       </div>
-
-      <!-- ETSY LISTING FORM -->
-      <div id="market-listing-form" style="display:none" class="k-card">
-        <div class="k-glow"></div>
-        <p class="slbl">📋 DRAFT ETSY LISTING</p>
-        <div class="status-pill pending" style="margin-bottom:.9rem;display:inline-flex"><span class="pill-dot"></span>ETSY: AWAITING API APPROVAL — DRAFT MODE ONLY</div>
-        <div class="form-group">
-          <label class="form-label">PRODUCT NAME *</label>
-          <input type="text" class="form-input" id="listing-name" placeholder="e.g. Kitsari Nine-Tails Art Print"/>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">PRODUCT TYPE</label>
-            <select class="form-select" id="listing-type">
-              <option value="art print">Art Print</option>
-              <option value="t-shirt">T-Shirt</option>
-              <option value="hoodie">Hoodie</option>
-              <option value="sticker sheet">Sticker Sheet</option>
-              <option value="tote bag">Tote Bag</option>
-              <option value="mug">Mug</option>
-              <option value="enamel pin">Enamel Pin</option>
-              <option value="phone case">Phone Case</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">TARGET BUYER</label>
-            <input type="text" class="form-input" id="listing-buyer" placeholder="anime fans, collectors..."/>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">DESIGN NOTES</label>
-          <textarea class="form-textarea" id="listing-desc" placeholder="Describe the design concept, colors, mood..."></textarea>
-        </div>
-        <div class="t-foot" style="padding:0;margin-top:.5rem">
-          <button class="res-act" onclick="closeMarketAction('listing')">✕ CLOSE</button>
-          <button class="t-send" onclick="runEtsyListing()">DRAFT LISTING ✦</button>
-        </div>
-        <div class="loading" id="listing-loading">
-          <div class="orbs"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
-          <span class="load-txt">Kitsari inscribes the scroll...</span>
-        </div>
-        <div class="res-wrap" id="listing-res" style="margin-top:.9rem">
-          <div class="res-bar"><span class="res-bar-l">✦ ETSY LISTING DRAFT</span><div class="res-acts"><button class="res-act" onclick="copyRes('listing-body')">⎘ COPY</button><button class="res-act" onclick="clearRes('listing-res')">✕</button></div></div>
-          <div class="res-body" id="listing-body"></div>
-        </div>
-        <div class="err-box" id="listing-err"></div>
+      <div class="t-foot" style="padding:0;margin-top:.5rem;border-top:none">
+        <button class="res-act" onclick="closeForm('scan')">✕ CLOSE</button>
+        <button class="t-send" onclick="runMarketScan()">SCAN MARKET ✦</button>
       </div>
+      <div class="loading" id="ms-loading"><div class="orbs"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div><span class="load-txt">Scanning market signals...</span></div>
+      <div class="res-wrap" id="ms-res"><div class="res-bar"><span class="res-bar-l">✦ MARKET SIGNAL REPORT</span><div class="res-acts"><button class="res-act" onclick="copyEl('ms-body')">⎘ COPY</button><button class="res-act" onclick="hideEl('ms-res')">✕</button></div></div><div class="res-body" id="ms-body"></div></div>
+      <div class="err-box" id="ms-err"></div>
+    </div>
 
-      <!-- LAUNCH POST FORM -->
-      <div id="market-launch-form" style="display:none" class="k-card">
-        <div class="k-glow"></div>
-        <p class="slbl">🚀 CREATE LAUNCH POST</p>
-        <div class="form-group">
-          <label class="form-label">PRODUCT NAME *</label>
-          <input type="text" class="form-input" id="launch-name" placeholder="e.g. Kitsari Nine-Tails Art Print"/>
+    <!-- LAUNCH POST FORM (market) -->
+    <div id="form-launch-mkt" class="card" style="display:none">
+      <div class="card-glow"></div>
+      <p class="slbl">🚀 CREATE LAUNCH POST</p>
+      <div class="f-group"><label class="f-lbl">PRODUCT NAME *</label><input type="text" class="f-input" id="lp-name" placeholder="e.g. Kitsari Nine-Tails Art Print"/></div>
+      <div class="f-row">
+        <div class="f-group"><label class="f-lbl">PLATFORM</label>
+          <select class="f-select" id="lp-platform">
+            <option value="X (Twitter) and Instagram">X + Instagram</option>
+            <option value="X (Twitter)">X only</option><option value="Instagram">Instagram only</option>
+          </select>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">PLATFORM</label>
-            <select class="form-select" id="launch-platform">
-              <option value="X (Twitter) and Instagram">X + Instagram</option>
-              <option value="X (Twitter)">X / Twitter only</option>
-              <option value="Instagram">Instagram only</option>
-              <option value="all platforms">All Platforms</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">DROP TIMING</label>
-            <input type="text" class="form-input" id="launch-date" placeholder="now live / Saturday drop / etc."/>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">TONE</label>
-          <select class="form-select" id="launch-tone">
-            <option value="mystical, hype, community-focused">Mystical Hype</option>
-            <option value="warm and cozy, collector-friendly">Collector Warm</option>
-            <option value="bold and urgent, scarcity-driven">Bold Urgency</option>
+        <div class="f-group"><label class="f-lbl">TONE</label>
+          <select class="f-select" id="lp-tone">
+            <option value="mystical, hype, community-first">Mystical Hype</option>
+            <option value="warm, collector-friendly">Collector Warm</option>
+            <option value="bold, urgent, scarcity-driven">Bold Urgency</option>
             <option value="lore-driven, storytelling-first">Lore First</option>
           </select>
         </div>
-        <div class="t-foot" style="padding:0;margin-top:.5rem">
-          <button class="res-act" onclick="closeMarketAction('launch')">✕ CLOSE</button>
-          <button class="t-send" onclick="runLaunchPost()">CREATE POSTS ✦</button>
-        </div>
-        <div class="loading" id="launch-loading">
-          <div class="orbs"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
-          <span class="load-txt">Kitsari fires the signal lanterns...</span>
-        </div>
-        <div class="res-wrap" id="launch-res" style="margin-top:.9rem">
-          <div class="res-bar"><span class="res-bar-l">✦ LAUNCH POSTS</span><div class="res-acts"><button class="res-act" onclick="copyRes('launch-body')">⎘ COPY</button><button class="res-act" onclick="clearRes('launch-res')">✕</button></div></div>
-          <div class="res-body" id="launch-body"></div>
-        </div>
-        <div class="err-box" id="launch-err"></div>
       </div>
-
-    </div><!-- /panel-market -->
-
-    <!-- ═══ LUNAR LEDGER PANEL ═══ -->
-    <div class="panel" id="panel-ledger">
-
-      <div class="ledger-header">
-        <div class="ledger-title">📊 Lunar Ledger</div>
-        <div class="ledger-sub">ANALYTICS DASHBOARD // NIGHT MARKET INTELLIGENCE</div>
+      <div class="f-group"><label class="f-lbl">DROP TIMING</label><input type="text" class="f-input" id="lp-date" placeholder="now live / this Saturday / etc."/></div>
+      <div class="t-foot" style="padding:0;margin-top:.5rem;border-top:none">
+        <button class="res-act" onclick="closeForm('launch-mkt')">✕ CLOSE</button>
+        <button class="t-send" onclick="runLaunchPost()">CREATE POSTS ✦</button>
       </div>
+      <div class="loading" id="lp-loading"><div class="orbs"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div><span class="load-txt">Kitsari fires the signal lanterns...</span></div>
+      <div class="res-wrap" id="lp-res"><div class="res-bar"><span class="res-bar-l">✦ LAUNCH POSTS</span><div class="res-acts"><button class="res-act" onclick="copyEl('lp-body')">⎘ COPY</button><button class="res-act" onclick="hideEl('lp-res')">✕</button></div></div><div class="res-body" id="lp-body"></div></div>
+      <div class="err-box" id="lp-err"></div>
+    </div>
 
-      <div class="ledger-pending">
-        <div class="ledger-pending-icon">🏮</div>
-        <div class="ledger-pending-title">Market Intelligence Pending</div>
-        <div class="ledger-pending-txt">
-          Connect your Etsy shop and Printify catalog to unlock live analytics.<br/>
-          Etsy integration is currently <strong style="color:var(--gold)">awaiting API approval</strong>.<br/>
-          Once connected, this dashboard will show real-time market data.
-        </div>
+  </div><!-- /market -->
+
+  <!-- ═══ LUNAR LEDGER ═══ -->
+  <div class="panel" id="panel-ledger">
+    <div class="ledger-hero">
+      <div class="ledger-icon">📊</div>
+      <div class="ledger-title">Lunar Ledger</div>
+      <div class="ledger-sub">LANTERN DISTRICT MARKET INTELLIGENCE</div>
+    </div>
+
+    <div id="ledger-offline" class="empty-state">
+      <div class="empty-icon">🏮</div>
+      <div class="empty-title">Lantern District Market Offline</div>
+      <div class="empty-txt">No market signals detected yet.<br>Connect your Etsy shop to activate the Lunar Ledger.</div>
+      <button class="connect-btn-sm" style="margin-top:.8rem" onclick="connectEtsy()">CONNECT ETSY SHOP</button>
+    </div>
+
+    <div id="ledger-live" style="display:none">
+      <p class="slbl">✦ ETSY PERFORMANCE</p>
+      <div class="stat-grid">
+        <div class="stat-card" style="--sc:#67e8f9"><div class="stat-icon">👁️</div><div class="stat-label">SHOP VISITS</div><div class="stat-value" id="ls-visits">—</div><div class="stat-note">total favorers</div></div>
+        <div class="stat-card" style="--sc:#f59e0b"><div class="stat-icon">❤️</div><div class="stat-label">FAVORITES</div><div class="stat-value" id="ls-faves">—</div><div class="stat-note">shop favorers</div></div>
+        <div class="stat-card" style="--sc:#4ade80"><div class="stat-icon">📦</div><div class="stat-label">ORDERS</div><div class="stat-value" id="ls-orders">—</div><div class="stat-note">all time</div></div>
+        <div class="stat-card" style="--sc:#c084fc"><div class="stat-icon">📋</div><div class="stat-label">ACTIVE LISTINGS</div><div class="stat-value" id="ls-listings">—</div><div class="stat-note">live in shop</div></div>
+        <div class="stat-card" style="--sc:#e8c97a"><div class="stat-icon">📝</div><div class="stat-label">DRAFT COUNT</div><div class="stat-value" id="ls-drafts">—</div><div class="stat-note">pending review</div></div>
+        <div class="stat-card" style="--sc:#2dd4bf"><div class="stat-icon">🏪</div><div class="stat-label">SHOP NAME</div><div class="stat-value" style="font-size:.85rem" id="ls-shopname">—</div><div class="stat-note">lantern district</div></div>
       </div>
+      <p class="slbl" style="margin-top:.5rem">✦ DRAFT LISTING QUEUE</p>
+      <div class="draft-count-badge"><div class="dcb-num" id="draft-count-num">0</div><div class="dcb-label">DRAFTS AWAITING REVIEW</div></div>
+      <div class="pub-lock" style="margin-bottom:1.1rem">Autonomous publishing is locked until draft quality, Etsy compliance, and Printify sync are verified.</div>
+    </div>
 
-      <p class="slbl">✦ ETSY PERFORMANCE METRICS</p>
-      <div class="ledger-grid">
-        <div class="stat-card" style="--stat-color:#67e8f9">
-          <div class="stat-icon">👁️</div>
-          <div class="stat-label">SHOP VISITS</div>
-          <div class="stat-value" id="stat-visits">—</div>
-          <div class="stat-note">30-day total</div>
-        </div>
-        <div class="stat-card" style="--stat-color:#f59e0b">
-          <div class="stat-icon">❤️</div>
-          <div class="stat-label">FAVORITES</div>
-          <div class="stat-value" id="stat-faves">—</div>
-          <div class="stat-note">all listings</div>
-        </div>
-        <div class="stat-card" style="--stat-color:#4ade80">
-          <div class="stat-icon">📦</div>
-          <div class="stat-label">ORDERS</div>
-          <div class="stat-value" id="stat-orders">—</div>
-          <div class="stat-note">30-day total</div>
-        </div>
-        <div class="stat-card" style="--stat-color:#c084fc">
-          <div class="stat-icon">💰</div>
-          <div class="stat-label">REVENUE</div>
-          <div class="stat-value" id="stat-revenue">—</div>
-          <div class="stat-note">30-day USD</div>
-        </div>
-        <div class="stat-card" style="--stat-color:#e8c97a">
-          <div class="stat-icon">📈</div>
-          <div class="stat-label">CONVERSION</div>
-          <div class="stat-value" id="stat-conv">—</div>
-          <div class="stat-note">visits to orders</div>
-        </div>
-        <div class="stat-card" style="--stat-color:#f472b6">
-          <div class="stat-icon">🌐</div>
-          <div class="stat-label">SOCIAL TRAFFIC</div>
-          <div class="stat-value" id="stat-social">—</div>
-          <div class="stat-note">referral visits</div>
-        </div>
+    <p class="slbl">✦ CONNECTION HEALTH</p>
+    <div class="health-grid">
+      <div class="health-row">
+        <div class="hr-left"><span class="hr-name">ETSY SHOP</span><span class="hr-detail" id="health-etsy-detail">Not connected</span></div>
+        <span class="conn-pill" id="health-etsy-pill" style="background:rgba(255,107,107,.07);border:1px solid rgba(255,107,107,.22);color:var(--red)"><span class="pill-dot"></span>OFFLINE</span>
       </div>
-
-      <p class="slbl">✦ BEST PERFORMING PRODUCT</p>
-      <div class="best-product-card">
-        <div class="bp-label">TOP LISTING THIS PERIOD</div>
-        <div class="bp-placeholder" id="stat-best">Connect Etsy to see top products</div>
+      <div class="health-row">
+        <div class="hr-left"><span class="hr-name">PRINTIFY</span><span class="hr-detail" id="health-printify-detail">Checking...</span></div>
+        <span class="conn-pill disconnected" id="health-printify-pill"><span class="pill-dot"></span>CHECKING</span>
       </div>
-
-      <p class="slbl">✦ CONNECT INTEGRATIONS</p>
-      <div class="market-connect-bar">
-        <div class="connect-info">
-          <span class="connect-name">ETSY SHOP</span>
-          <span class="status-pill pending"><span class="pill-dot"></span>AWAITING API APPROVAL</span>
-        </div>
-        <button class="connect-btn" disabled>CONNECT ETSY</button>
+      <div class="health-row">
+        <div class="hr-left"><span class="hr-name">KITSARI AI</span><span class="hr-detail">Claude claude-opus-4-5 // Active</span></div>
+        <span class="conn-pill connected"><span class="pill-dot"></span>ONLINE</span>
       </div>
-      <div class="market-connect-bar">
-        <div class="connect-info">
-          <span class="connect-name">PRINTIFY CATALOG</span>
-          <span class="status-pill" id="ledger-printify-pill" style="background:rgba(155,92,246,.06);border:1px solid var(--border);color:var(--pur)"><span class="pill-dot"></span>CHECKING...</span>
-        </div>
-        <button class="connect-btn" onclick="connectPrintify()">CONNECT PRINTIFY</button>
-      </div>
+    </div>
 
-    </div><!-- /panel-ledger -->
-
-  </div><!-- /app-inner -->
+  </div><!-- /ledger -->
 </div><!-- /app -->
 
 <footer>
-  <p class="ft-txt">KITSARI COMMERCE CONSOLE v1 // CELESTIAL NIGHT MARKET // LANTERN DISTRICT ✦</p>
-  <div class="ft-runes">狐 鬼 天 龍 影 精 星 商</div>
+  <p class="ft">KITSARI COMMERCE CONSOLE v2 // LANTERN DISTRICT MARKET // ALL RIGHTS RESERVED ✦</p>
+  <div class="ft-r">狐 鬼 天 龍 影 精 星 商</div>
 </footer>
 
 <script>
 /* ══════════════════════════════════════════════════════════
-   KITSARI COMMERCE CONSOLE — FRONTEND
+   KITSARI COMMERCE CONSOLE v2 — FRONTEND ENGINE
 ══════════════════════════════════════════════════════════ */
 
 /* ── GATE ─────────────────────────────────────────────── */
 function enterRealm(){
   document.getElementById('gate').classList.add('out');
   const app=document.getElementById('app');
-  setTimeout(()=>{app.classList.add('show');initAll();},600);
+  setTimeout(()=>{app.classList.add('show');boot();},600);
+}
+function boot(){
+  initBg();initFx();initHabitat();initClock();
+  checkAllConnections();
+  handleOAuthReturn();
 }
 
-function initAll(){
-  initBg();initFx();initHabitat();initClock();checkConnections();
+/* ── OAUTH RETURN ─────────────────────────────────────── */
+function handleOAuthReturn(){
+  const p=new URLSearchParams(location.search);
+  if(p.get('etsy')==='connected'){
+    history.replaceState({},'','/');
+    showHabFlash('gold');
+    checkAllConnections();
+    switchTab('ledger',document.querySelectorAll('.nav-tab')[2]);
+    setTimeout(()=>brightLanterns(),400);
+  }
 }
 
 /* ── CLOCK ────────────────────────────────────────────── */
 function initClock(){
   const el=document.getElementById('clock');
-  function tick(){
-    const n=new Date();
-    el.textContent='MARKET UPLINK // '+n.toISOString().replace('T',' ').slice(0,19)+' UTC';
-    setTimeout(tick,1000);
-  }tick();
+  (function t(){el.textContent='MARKET UPLINK // '+new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';setTimeout(t,1000);})();
 }
 
 /* ── TABS ─────────────────────────────────────────────── */
@@ -711,179 +588,264 @@ function switchTab(name,tab){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   tab.classList.add('active');
   document.getElementById('panel-'+name).classList.add('active');
+  if(name==='ledger')loadLedger();
 }
 
+/* ── FORMS (market panel) ─────────────────────────────── */
+const FORMS=['draft','idea','scan','launch-mkt'];
+function openForm(id){
+  FORMS.forEach(f=>{const el=document.getElementById('form-'+f);if(el)el.style.display='none';});
+  const el=document.getElementById('form-'+id);
+  if(el){el.style.display='block';el.scrollIntoView({behavior:'smooth',block:'start'});}
+}
+function closeForm(id){const el=document.getElementById('form-'+id);if(el)el.style.display='none';}
+
 /* ── CONNECTIONS ──────────────────────────────────────── */
-async function checkConnections(){
-  // Etsy
+let etsyConnected=false,printifyConnected=false;
+
+async function checkAllConnections(){
+  await Promise.all([checkEtsy(),checkPrintify()]);
+}
+
+async function checkEtsy(){
   try{
     const r=await fetch('/api/etsy/status');const d=await r.json();
     const pill=document.getElementById('etsy-pill');
-    if(d.connected){pill.className='status-pill connected';pill.innerHTML='<span class="pill-dot"></span>CONNECTED';}
-    else{pill.className='status-pill pending';pill.innerHTML='<span class="pill-dot"></span>AWAITING APPROVAL';}
+    const btn=document.getElementById('etsy-conn-btn');
+    const discBtn=document.getElementById('etsy-disc-btn');
+    const nameEl=document.getElementById('etsy-shop-name');
+    if(d.connected){
+      etsyConnected=true;
+      pill.className='conn-pill connected';pill.innerHTML='<span class="pill-dot"></span>CONNECTED';
+      if(d.shopName){nameEl.textContent='// '+d.shopName;nameEl.style.display='inline';}
+      btn.style.display='none';discBtn.style.display='inline-block';
+      btn.classList.add('connected-state');
+      updateHealthEtsy(true,d.shopName);
+    } else if(d.status==='unconfigured'){
+      pill.className='conn-pill unconfigured';pill.innerHTML='<span class="pill-dot"></span>NOT CONFIGURED';
+      btn.disabled=true;btn.title='Add ETSY_API_KEY to Railway';
+    } else {
+      etsyConnected=false;
+      pill.className='conn-pill disconnected';pill.innerHTML='<span class="pill-dot"></span>DISCONNECTED';
+      btn.style.display='inline-block';discBtn.style.display='none';
+    }
   }catch(e){}
-  // Printify
+}
+
+async function checkPrintify(){
   try{
     const r=await fetch('/api/printify/status');const d=await r.json();
-    const pills=[document.getElementById('printify-pill'),document.getElementById('ledger-printify-pill')].filter(Boolean);
-    pills.forEach(pill=>{
-      if(d.connected){pill.className='status-pill connected';pill.innerHTML='<span class="pill-dot"></span>CONNECTED';}
-      else{pill.className='status-pill offline';pill.innerHTML='<span class="pill-dot"></span>'+((d.message||'').includes('not set')?'NO API KEY':'CONNECTION FAILED');}
-    });
+    const pill=document.getElementById('printify-pill');
+    const hp=document.getElementById('health-printify-pill');
+    const hd=document.getElementById('health-printify-detail');
     if(d.connected){
-      document.getElementById('printify-connect-btn').textContent='CONNECTED ✓';
-      document.getElementById('printify-connect-btn').disabled=true;
+      printifyConnected=true;
+      pill.className='conn-pill connected';pill.innerHTML='<span class="pill-dot"></span>CONNECTED';
+      hp.className='conn-pill connected';hp.innerHTML='<span class="pill-dot"></span>CONNECTED';
+      hd.textContent=d.shopCount+' shop(s) found';
+      activateStalls();
+    } else {
+      printifyConnected=false;
+      pill.className='conn-pill disconnected';pill.innerHTML='<span class="pill-dot"></span>'+(d.message||'').includes('not set')?'NO KEY':'OFFLINE';
+      hp.className='conn-pill disconnected';hp.innerHTML='<span class="pill-dot"></span>OFFLINE';
+      hd.textContent=d.message||'Not configured';
     }
   }catch(e){}
-  // Ledger
+}
+
+function updateHealthEtsy(ok,shopName){
+  const p=document.getElementById('health-etsy-pill');
+  const d=document.getElementById('health-etsy-detail');
+  if(ok){p.className='conn-pill connected';p.innerHTML='<span class="pill-dot"></span>CONNECTED';d.textContent=shopName||'Shop connected';}
+  else{p.className='conn-pill disconnected';p.innerHTML='<span class="pill-dot"></span>OFFLINE';d.textContent='Not connected';}
+}
+
+function connectEtsy(){ window.location.href='/api/etsy/connect'; }
+function disconnectEtsy(){
+  if(!confirm('Disconnect Etsy from the Lantern District Market?'))return;
+  // Clear server-side token by navigating away — in production add a /api/etsy/disconnect route
+  alert('To fully disconnect, redeploy the Railway app or add a /api/etsy/disconnect route. The token is stored in server memory.');
+  checkEtsy();
+}
+
+/* ── LEDGER ───────────────────────────────────────────── */
+async function loadLedger(){
   try{
     const r=await fetch('/api/ledger/snapshot');const d=await r.json();
-    if(d.mock){
-      const m=d.mock;
-      const sv=v=>v||'—';
-      document.getElementById('stat-visits').textContent=sv(m.visits)||'—';
-      document.getElementById('stat-faves').textContent=sv(m.favorites)||'—';
-      document.getElementById('stat-orders').textContent=sv(m.orders)||'—';
-      document.getElementById('stat-revenue').textContent=m.revenue&&m.revenue!='0.00'?'$'+m.revenue:'—';
-      document.getElementById('stat-conv').textContent=sv(m.conversionRate)||'—';
-      document.getElementById('stat-social').textContent=sv(m.socialTraffic)||'—';
-      document.getElementById('stat-best').textContent=m.bestProduct||'Connect Etsy to see top products';
+    if(d.connected){
+      document.getElementById('ledger-offline').style.display='none';
+      document.getElementById('ledger-live').style.display='block';
+      setEl('ls-visits',d.visits??'—');setEl('ls-faves',d.favorites??'—');
+      setEl('ls-orders',d.orders??'—');setEl('ls-listings',d.listingCount??'—');
+      setEl('ls-drafts',d.draftCount??'—');setEl('ls-shopname',d.shopName??'—');
+      setEl('draft-count-num',d.draftCount??0);
+      showHabFlash('gold');
+    } else {
+      document.getElementById('ledger-offline').style.display='block';
+      document.getElementById('ledger-live').style.display='none';
     }
   }catch(e){}
 }
 
-function connectEtsy(){alert('Etsy integration is pending API approval. Listing drafts are saved locally until approval is granted.');}
-function connectPrintify(){alert('Add your PRINTIFY_API_KEY to the Railway environment variables to connect your Printify catalog.');}
-
-/* ── SHRINE PANEL ─────────────────────────────────────── */
-const SHRINE_MODES={
-  open:{lbl:'OPEN CHANNEL',ph:'Describe your drop, campaign, or transmission...',endpoint:'/api/agent/kitsari',key:'command'},
-  xpost:{lbl:'X POST MODE',ph:'What are you launching or announcing?',endpoint:'/api/commerce/launch-post',buildBody:()=>({productName:document.getElementById('shrine-cmd').value.trim(),platform:'X (Twitter)',tone:'mystical, hype',dropDate:'now live'})},
-  lore:{lbl:'LORE MODE',ph:'What celestial lore shall Kitsari weave?',endpoint:'/api/commerce/lore-content',buildBody:()=>({topic:document.getElementById('shrine-cmd').value.trim(),platform:'X / Twitter'})},
-  campaign:{lbl:'CAMPAIGN MODE',ph:'What are you launching? Describe the product and goal...',endpoint:'/api/commerce/launch-post',buildBody:()=>({productName:document.getElementById('shrine-cmd').value.trim(),platform:'X (Twitter) and Instagram',tone:'mystical, hype, community-focused'})},
+/* ── SHRINE MODES ─────────────────────────────────────── */
+const MODES={
+  open:{lbl:'OPEN CHANNEL',ph:'Speak your intent...',ep:'/api/agent/kitsari',key:'command'},
+  xpost:{lbl:'X POST MODE',ph:'What are you posting or launching?',ep:'/api/commerce/launch-post',
+    build:()=>({productName:getVal('shrine-cmd'),platform:'X (Twitter)',tone:'mystical, hype',dropDate:'now live'})},
+  lore:{lbl:'LORE MODE',ph:'What celestial lore shall Kitsari weave?',ep:'/api/commerce/lore-content',
+    build:()=>({topic:getVal('shrine-cmd'),platform:'X / Twitter'})},
+  campaign:{lbl:'CAMPAIGN MODE',ph:'What are you launching? Describe the product and goal...',ep:'/api/commerce/launch-post',
+    build:()=>({productName:getVal('shrine-cmd'),platform:'X (Twitter) and Instagram',tone:'mystical, hype, community-first'})},
+  launch:{lbl:'LAUNCH POST',ph:'Product name and drop timing...',ep:'/api/commerce/launch-post',
+    build:()=>({productName:getVal('shrine-cmd'),platform:'X (Twitter) and Instagram',tone:'mystical, hype',dropDate:'now live'})},
+  engagement:{lbl:'ENGAGEMENT MODE',ph:'Describe your audience or topic for engagement ideas...',ep:'/api/agent/kitsari',
+    build:()=>({command:`Generate 5 creative engagement ideas for the Celestial Yokai community on X and Instagram. Topic: ${getVal('shrine-cmd')}. Include polls, reply hooks, community games, and lore challenges. Focus on growing the Lantern District following.`})},
 };
-let shrineMode='open';
+let currentMode='open';
 
-function setShrine(mode){
-  shrineMode=mode;
-  const m=SHRINE_MODES[mode]||SHRINE_MODES.open;
-  document.getElementById('shrine-mode-lbl').textContent=m.lbl;
-  document.getElementById('shrine-cmd').placeholder=m.ph;
+function setMode(m){
+  currentMode=m;
+  const md=MODES[m]||MODES.open;
+  setEl('shrine-mode-lbl',md.lbl);
+  document.getElementById('shrine-cmd').placeholder=md.ph;
   document.getElementById('shrine-cmd').focus();
-}
-function quickAction(panel,mode){
-  if(panel==='shrine')setShrine(mode);
+  scrollTo('panel-shrine');
 }
 
 document.getElementById('shrine-cmd').addEventListener('input',function(){
-  document.getElementById('shrine-charct').textContent=this.value.length+'/1000';
+  setEl('shrine-charct',this.value.length+'/1000');
 });
 document.getElementById('shrine-cmd').addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();transmitShrine();}
 });
 
 async function transmitShrine(){
-  const raw=document.getElementById('shrine-cmd').value.trim();
-  if(!raw)return;
-  const m=SHRINE_MODES[shrineMode]||SHRINE_MODES.open;
-  let body;
-  if(m.buildBody)body=m.buildBody();
-  else body={command:raw};
-  await runTransmission({
-    endpoint:m.endpoint,body,
-    loadingId:'shrine-loading',sendId:'shrine-send',loadTxtId:'shrine-load-txt',
+  const raw=getVal('shrine-cmd');if(!raw)return;
+  const md=MODES[currentMode]||MODES.open;
+  const body=md.build?md.build():{command:raw};
+  await runTransmit({
+    ep:md.ep,body,
+    loadId:'shrine-loading',sendId:'shrine-send',loadTxt:'Kitsari channels the signal...',
     resId:'shrine-res',bodyId:'shrine-body',errId:'shrine-err',
-    loadingTxt:'Kitsari channels the signal...',
-    resLabel:'SHRINE RESPONSE',
   });
 }
 
 /* ── MARKET ACTIONS ───────────────────────────────────── */
-const marketForms={idea:'market-idea-form',listing:'market-listing-form',launch:'market-launch-form'};
-function openMarketAction(type){
-  Object.values(marketForms).forEach(id=>document.getElementById(id).style.display='none');
-  document.getElementById(marketForms[type]).style.display='block';
-  document.getElementById(marketForms[type]).scrollIntoView({behavior:'smooth',block:'start'});
+async function runDraftListing(){
+  const concept=getVal('dl-concept');if(!concept){showErr('dl-err','Concept required.');return;}
+  const body={concept,productType:getVal('dl-type'),targetBuyer:getVal('dl-buyer'),nftAngle:getVal('dl-nft')};
+  // Run AI generation
+  await runTransmit({
+    ep:'/api/commerce/draft-listing',body,
+    loadId:'dl-loading',sendId:null,loadTxt:'Kitsari inscribes the sacred scroll...',
+    onSuccess:(d)=>renderDraftResult(d),
+    errId:'dl-err',
+  });
 }
-function closeMarketAction(type){document.getElementById(marketForms[type]).style.display='none';}
+
+function renderDraftResult(data){
+  const container=document.getElementById('dl-result');
+  container.innerHTML='';
+  const sc=document.createElement('div');sc.className='scroll-card';
+  sc.innerHTML=`<div class="sc-top"><span class="sc-title">✦ LISTING DRAFT — REVIEW REQUIRED</span><div class="sc-acts"><button class="sc-act" onclick="copyScrollCard(this)">⎘ COPY</button></div></div><div class="sc-body" id="dl-scroll-body"></div>`;
+  container.appendChild(sc);
+  // Publish to Etsy button
+  if(etsyConnected){
+    const pb=document.createElement('button');pb.className='push-btn';
+    pb.innerHTML='🏮 PUSH TO ETSY AS DRAFT';
+    pb.onclick=()=>pushDraftToEtsy(data.response,pb);
+    container.appendChild(pb);
+  } else {
+    const note=document.createElement('div');note.className='pub-lock';
+    note.textContent='Connect Etsy to push this draft to your shop.';
+    container.appendChild(note);
+  }
+  const lock=document.createElement('div');lock.className='pub-lock';lock.textContent='Autonomous publishing is locked until draft quality, Etsy compliance, and Printify sync are verified.';
+  container.appendChild(lock);
+  streamInto('dl-scroll-body',data.response||'');
+  showHabFlash('gold');
+}
+
+async function pushDraftToEtsy(aiText,btn){
+  // Parse title and description from AI response
+  const titleMatch=aiText.match(/##\s*ETSY SEO TITLE\s*\n([\s\S]+?)(?=\n##|$)/i);
+  const descMatch=aiText.match(/##\s*DESCRIPTION\s*\n([\s\S]+?)(?=\n##|$)/i);
+  const tagsMatch=aiText.match(/##\s*13 ETSY TAGS\s*\n([\s\S]+?)(?=\n##|$)/i);
+  const priceMatch=aiText.match(/\$(\d+(?:\.\d+)?)/);
+  if(!titleMatch){alert('Could not parse Etsy title from draft. Copy and create manually.');return;}
+  const title=(titleMatch[1]||'').trim().split('\n')[0].slice(0,140);
+  const description=(descMatch?.[1]||'').trim().slice(0,5000);
+  const rawTags=(tagsMatch?.[1]||'').trim();
+  const tags=rawTags.split(/,\s*/).map(t=>t.trim().replace(/\*\*/g,'')).filter(Boolean).slice(0,13);
+  const price=priceMatch?parseFloat(priceMatch[1]):18.00;
+  btn.disabled=true;btn.textContent='Pushing to Etsy...';
+  try{
+    const r=await fetch('/api/etsy/create-draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description,tags,price})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Push failed');
+    btn.textContent='✓ DRAFT CREATED IN ETSY';btn.style.borderColor='rgba(74,222,128,.4)';btn.style.color='var(--green)';
+    showHabFlash('gold');
+    if(d.url){const a=document.createElement('a');a.href=d.url;a.target='_blank';a.style.cssText='display:block;font-family:var(--fm);font-size:.55rem;color:var(--gold);margin-top:.4rem;letter-spacing:.08em';a.textContent='⟩ VIEW ON ETSY (DRAFT)';btn.parentNode.insertBefore(a,btn.nextSibling);}
+  }catch(e){
+    btn.disabled=false;btn.textContent='PUSH FAILED — RETRY';
+    showErr('dl-err',e.message);
+  }
+}
+
+function copyScrollCard(btn){
+  const body=btn.closest('.scroll-card').querySelector('.sc-body');
+  navigator.clipboard.writeText(body.innerText).then(()=>{const o=btn.textContent;btn.textContent='✓ COPIED';setTimeout(()=>btn.textContent=o,2000);});
+}
 
 async function runProductIdea(){
-  const niche=document.getElementById('idea-niche').value.trim();
-  const style=document.getElementById('idea-style').value.trim();
-  const medium=document.getElementById('idea-medium').value;
-  await runTransmission({
-    endpoint:'/api/commerce/product-idea',body:{niche,style,medium},
-    loadingId:'idea-loading',sendId:null,
-    resId:'idea-res',bodyId:'idea-body',errId:'idea-err',
-    loadingTxt:'Kitsari searches the celestial catalog...',
-  });
+  const body={niche:getVal('pi-niche'),style:getVal('pi-style'),medium:getVal('pi-medium')};
+  await runTransmit({ep:'/api/commerce/product-idea',body,loadId:'pi-loading',sendId:null,loadTxt:'Kitsari searches the celestial catalog...',resId:'pi-res',bodyId:'pi-body',errId:'pi-err'});
 }
 
-async function runEtsyListing(){
-  const productName=document.getElementById('listing-name').value.trim();
-  if(!productName){document.getElementById('listing-err').style.display='block';document.getElementById('listing-err').textContent='⚠ Product name is required.';return;}
-  const productType=document.getElementById('listing-type').value;
-  const description=document.getElementById('listing-desc').value.trim();
-  const targetBuyer=document.getElementById('listing-buyer').value.trim();
-  await runTransmission({
-    endpoint:'/api/commerce/etsy-listing',body:{productName,productType,description,targetBuyer},
-    loadingId:'listing-loading',sendId:null,
-    resId:'listing-res',bodyId:'listing-body',errId:'listing-err',
-    loadingTxt:'Kitsari inscribes the scroll...',
-  });
+async function runMarketScan(){
+  const body={category:getVal('ms-cat'),priceRange:getVal('ms-price')};
+  await runTransmit({ep:'/api/commerce/market-scan',body,loadId:'ms-loading',sendId:null,loadTxt:'Scanning market signals...',resId:'ms-res',bodyId:'ms-body',errId:'ms-err'});
 }
 
 async function runLaunchPost(){
-  const productName=document.getElementById('launch-name').value.trim();
-  if(!productName){document.getElementById('launch-err').style.display='block';document.getElementById('launch-err').textContent='⚠ Product name is required.';return;}
-  const platform=document.getElementById('launch-platform').value;
-  const tone=document.getElementById('launch-tone').value;
-  const dropDate=document.getElementById('launch-date').value.trim();
-  await runTransmission({
-    endpoint:'/api/commerce/launch-post',body:{productName,platform,tone,dropDate},
-    loadingId:'launch-loading',sendId:null,
-    resId:'launch-res',bodyId:'launch-body',errId:'launch-err',
-    loadingTxt:'Kitsari fires the signal lanterns...',
-  });
+  const name=getVal('lp-name');if(!name){showErr('lp-err','Product name required.');return;}
+  const body={productName:name,platform:getVal('lp-platform'),tone:getVal('lp-tone'),dropDate:getVal('lp-date')};
+  await runTransmit({ep:'/api/commerce/launch-post',body,loadId:'lp-loading',sendId:null,loadTxt:'Kitsari fires the signal lanterns...',resId:'lp-res',bodyId:'lp-body',errId:'lp-err'});
 }
 
-/* ── CORE TRANSMISSION ENGINE ─────────────────────────── */
-async function runTransmission({endpoint,body,loadingId,sendId,resId,bodyId,errId,loadingTxt}){
-  hideEl(resId);hideEl(errId);showLoading(loadingId,true,loadingTxt,sendId);
-  habFlash();
+/* ── CORE TRANSMIT ENGINE ─────────────────────────────── */
+async function runTransmit({ep,body,loadId,sendId,loadTxt,resId,bodyId,errId,onSuccess}){
+  if(resId)hideEl(resId);hideEl(errId);
+  if(loadId){const l=document.getElementById(loadId);if(l){l.style.display='flex';const t=l.querySelector('.load-txt');if(t&&loadTxt)t.textContent=loadTxt;}}
+  if(sendId){const b=document.getElementById(sendId);if(b){b.disabled=true;b.textContent='TRANSMITTING...';}}
+  showHabFlash('pur');
   try{
-    const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
-    if(!r.ok){showErr(errId,d.error||'Signal lost. Retry.');return;}
-    const text=d.response||'';
-    await streamInto(bodyId,text);
-    showEl(resId);
-    habFlash();
-  }catch(e){
-    showErr(errId,'Connection to the Lantern District failed.');
-  }finally{
-    showLoading(loadingId,false,'',sendId);
+    if(!r.ok){showErr(errId,d.error||'Signal lost.');return;}
+    if(onSuccess){onSuccess(d);}
+    else if(resId&&bodyId){await streamInto(bodyId,d.response||'');showEl(resId);}
+    showHabFlash('gold');
+  }catch(e){showErr(errId,'Transmission failed: '+e.message);}
+  finally{
+    if(loadId){const l=document.getElementById(loadId);if(l)l.style.display='none';}
+    if(sendId){const b=document.getElementById(sendId);if(b){b.disabled=false;b.innerHTML=b.dataset.orig||'TRANSMIT ✦';}}
   }
 }
 
-/* ── STREAMING TEXT ───────────────────────────────────── */
+/* ── STREAMING ────────────────────────────────────────── */
 async function streamInto(bodyId,text){
-  const el=document.getElementById(bodyId);
+  const el=document.getElementById(bodyId);if(!el)return;
   el.innerHTML='';
   const lines=text.split('\n');
   for(let i=0;i<lines.length;i++){
-    const span=document.createElement('span');
-    span.className='res-line';span.style.animationDelay=(i*.04)+'s';
-    span.innerHTML=renderMd(lines[i])||'&nbsp;';
-    el.appendChild(span);
-    if(i<lines.length-1)el.appendChild(document.createTextNode('\n'));
-    if(i%3===0)await sleep(20);
+    const sp=document.createElement('span');sp.className='res-line sc-line';sp.style.animationDelay=(i*.035)+'s';sp.innerHTML=renderMd(lines[i])||'&nbsp;';
+    el.appendChild(sp);if(i<lines.length-1)el.appendChild(document.createTextNode('\n'));
+    if(i%4===0)await sleep(18);
   }
-  const sig=document.createElement('span');
-  sig.className='res-sig';sig.textContent='✦ Kitsari — Lantern District';
+  const sig=document.createElement('span');sig.className='res-sig';sig.textContent='✦ Kitsari — Lantern District';
   el.appendChild(document.createElement('br'));el.appendChild(sig);
 }
-
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
 /* ── MARKDOWN ─────────────────────────────────────────── */
@@ -892,43 +854,43 @@ function renderMd(t){
   return t
     .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
     .replace(/\*(.*?)\*/g,'<em>$1</em>')
-    .replace(/^### (.+)$/,'<span style="font-family:\'Cinzel Decorative\',serif;font-size:.9rem;color:var(--fox);display:inline-block;margin:.35rem 0 .1rem">$1</span>')
-    .replace(/^## (.+)$/,'<span style="font-family:\'Cinzel Decorative\',serif;font-size:1rem;color:var(--fox);display:inline-block;margin:.45rem 0 .12rem">$1</span>')
-    .replace(/^# (.+)$/,'<span style="font-family:\'Cinzel Decorative\',serif;font-size:1.1rem;color:var(--gold);display:inline-block;margin:.5rem 0 .15rem">$1</span>')
+    .replace(/^### (.+)$/,'<span style="font-family:\'Cinzel Decorative\',serif;font-size:.88rem;color:var(--fox);display:inline-block;margin:.35rem 0 .1rem">$1</span>')
+    .replace(/^## (.+)$/,'<span style="font-family:\'Cinzel Decorative\',serif;font-size:.98rem;color:var(--gold);display:inline-block;margin:.45rem 0 .12rem">$1</span>')
+    .replace(/^# (.+)$/,'<span style="font-family:\'Cinzel Decorative\',serif;font-size:1.08rem;color:var(--gold);display:inline-block;margin:.5rem 0 .15rem">$1</span>')
     .replace(/^- (.+)$/,'<span style="padding-left:.7rem">✦ $1</span>')
     .replace(/^\d+\. (.+)$/,'<span style="padding-left:.7rem">$1</span>')
-    .replace(/^---+$/, '<hr style="border:none;border-top:1px solid rgba(155,92,246,.2);margin:.6rem 0"/>')
+    .replace(/^---+$/,'<hr style="border:none;border-top:1px solid rgba(155,92,246,.18);margin:.55rem 0"/>')
     .replace(/`([^`]+)`/g,'<code style="background:rgba(155,92,246,.1);border:1px solid rgba(155,92,246,.18);border-radius:4px;padding:.04em .3em;font-family:var(--fm);font-size:.8em">$1</code>');
 }
 
-/* ── UI HELPERS ───────────────────────────────────────── */
-function showEl(id){if(id)document.getElementById(id).style.display='block';}
-function hideEl(id){if(id)document.getElementById(id).style.display='none';}
-function showErr(id,msg){const el=document.getElementById(id);el.textContent='⚠ '+msg;el.style.display='block';}
-function showLoading(id,on,txt,sendId){
-  const el=document.getElementById(id);
-  if(!el)return;
-  el.style.display=on?'flex':'none';
-  if(txt&&on){const t=el.querySelector('.load-txt');if(t)t.textContent=txt;}
-  if(sendId){const b=document.getElementById(sendId);if(b){b.disabled=on;if(on)b.textContent='TRANSMITTING...';else b.innerHTML=b.dataset.label||'TRANSMIT ✦';}}
-}
-function copyRes(bodyId){
-  const el=document.getElementById(bodyId);
-  if(!el)return;
+/* ── HELPERS ──────────────────────────────────────────── */
+function getVal(id){const el=document.getElementById(id);return el?el.value.trim():'';}
+function setEl(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
+function showEl(id){const el=document.getElementById(id);if(el)el.style.display='block';}
+function hideEl(id){const el=document.getElementById(id);if(el)el.style.display='none';}
+function showErr(id,msg){const el=document.getElementById(id);if(el){el.textContent='⚠ '+msg;el.style.display='block';}}
+function scrollTo(id){const el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
+function copyEl(bodyId){
+  const el=document.getElementById(bodyId);if(!el)return;
   navigator.clipboard.writeText(el.innerText).then(()=>{
-    const bars=el.closest('.res-wrap').querySelectorAll('.res-act');
-    const btn=bars[0];const o=btn.textContent;btn.textContent='✓ COPIED';
-    setTimeout(()=>btn.textContent=o,2000);
+    const bar=el.closest('.res-wrap')?.querySelector('.res-act');if(!bar)return;
+    const o=bar.textContent;bar.textContent='✓ COPIED';setTimeout(()=>bar.textContent=o,2000);
   });
 }
-function clearRes(resId){hideEl(resId);}
 
-/* ── HAB FLASH ────────────────────────────────────────── */
-function habFlash(){
+/* ── HABITAT FLASH ────────────────────────────────────── */
+function showHabFlash(type){
   const f=document.getElementById('hab-flash');
-  f.classList.add('on');setTimeout(()=>f.classList.remove('on'),900);
-  if(window._habFlash)window._habFlash();
+  f.className='hc-flash '+(type==='gold'?'gold-f':'pur-f')+' on';
+  setTimeout(()=>f.classList.remove('on'),900);
+  if(window._habSignal)window._habSignal(type);
 }
+
+/* ── HABITAT REACTIONS ────────────────────────────────── */
+let _lanternBright=false;
+let _stallsActive=false;
+function brightLanterns(){_lanternBright=true;}
+function activateStalls(){_stallsActive=true;}
 
 /* ══════════════════════════════════════════════════════
    BG CANVAS
@@ -938,39 +900,35 @@ function initBg(){
   let W,H,stars=[];
   function resize(){W=c.width=innerWidth;H=c.height=innerHeight;stars=[];for(let i=0;i<180;i++)stars.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.3+.2,a:Math.random(),da:(Math.random()*.004+.001)*(Math.random()<.5?1:-1)});}
   resize();addEventListener('resize',resize);
-  function draw(){
+  (function draw(){
     ctx.clearRect(0,0,W,H);
-    const g=ctx.createRadialGradient(W*.75,H*.2,0,W*.75,H*.2,W*.5);
-    g.addColorStop(0,'rgba(109,40,217,.07)');g.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-    const g2=ctx.createRadialGradient(W*.15,H*.8,0,W*.15,H*.8,W*.4);
-    g2.addColorStop(0,'rgba(76,29,149,.08)');g2.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=g2;ctx.fillRect(0,0,W,H);
-    for(const s of stars){s.a+=s.da;if(s.a<0||s.a>1)s.da*=-1;s.a=Math.max(0,Math.min(1,s.a));ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(220,200,255,${s.a*.55+.05})`;ctx.fill();}
+    const g=ctx.createRadialGradient(W*.75,H*.2,0,W*.75,H*.2,W*.5);g.addColorStop(0,'rgba(109,40,217,.07)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    const g2=ctx.createRadialGradient(W*.15,H*.8,0,W*.15,H*.8,W*.4);g2.addColorStop(0,'rgba(76,29,149,.08)');g2.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g2;ctx.fillRect(0,0,W,H);
+    for(const s of stars){s.a+=s.da;if(s.a<0||s.a>1)s.da*=-1;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(220,200,255,${Math.max(0,Math.min(1,s.a))*.55+.05})`;ctx.fill();}
     requestAnimationFrame(draw);
-  }draw();
+  })();
 }
 
 /* ══════════════════════════════════════════════════════
-   FX CANVAS — ember particles
+   FX CANVAS
 ══════════════════════════════════════════════════════ */
 function initFx(){
   const c=document.getElementById('fx-canvas'),ctx=c.getContext('2d');
   let W,H,ps=[];
   function resize(){W=c.width=innerWidth;H=c.height=innerHeight;}
   resize();addEventListener('resize',resize);
-  const cols=['rgba(232,201,122,','rgba(192,132,252,','rgba(245,158,11,'];
+  const cols=['rgba(232,201,122,','rgba(192,132,252,','rgba(245,158,11,','rgba(155,92,246,'];
   let t=0;
-  function draw(){
+  (function draw(){
     ctx.clearRect(0,0,W,H);t++;
-    if(t%10===0){const col=cols[Math.floor(Math.random()*cols.length)];ps.push({x:Math.random()*W,y:H+8,vx:(Math.random()-.5)*.35,vy:-(Math.random()*.5+.15),r:Math.random()*1.8+.4,life:0,max:Math.random()*220+130,col});}
-    ps=ps.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.life++;const prog=p.life/p.max;const a=prog<.15?(prog/.15)*.35:prog>.8?((1-prog)/.2)*.35:.35;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.col+a+')';ctx.fill();return p.life<p.max;});
+    if(t%9===0){const col=cols[Math.floor(Math.random()*cols.length)];ps.push({x:Math.random()*W,y:H+6,vx:(Math.random()-.5)*.33,vy:-(Math.random()*.5+.14),r:Math.random()*1.8+.35,life:0,max:Math.random()*200+120,col});}
+    ps=ps.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.life++;const pr=p.life/p.max,a=pr<.15?(pr/.15)*.3:pr>.8?((1-pr)/.2)*.3:.3;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.col+a+')';ctx.fill();return p.life<p.max;});
     requestAnimationFrame(draw);
-  }draw();
+  })();
 }
 
 /* ══════════════════════════════════════════════════════
-   HABITAT CANVAS — Night Market Scene
+   HABITAT CANVAS — Kitsari Night Market
 ══════════════════════════════════════════════════════ */
 function initHabitat(){
   const c=document.getElementById('habitat-canvas'),ctx=c.getContext('2d');
@@ -978,223 +936,181 @@ function initHabitat(){
   function resize(){c.width=cont.offsetWidth;c.height=cont.offsetHeight;}
   resize();addEventListener('resize',resize);
   const W=()=>c.width,H=()=>c.height;
-  let tick=0;
+  let tick=0,flashType=null,flashTimer=0;
 
-  // Fox state
-  const fox={x:.35,y:.76,dir:1,state:'walk',timer:0,frame:0,ftimer:0,tail:0};
+  // Signal handler from UI
+  window._habSignal=(type)=>{flashType=type;flashTimer=40;};
+
+  // Kitsari fox
+  const fox={x:.35,y:.77,dir:1,state:'walk',timer:0,frame:0,ft:0,tail:0,targetStall:-1};
 
   // Merchant stalls
-  const stalls=[
-    {x:.12,label:'SCROLLS',lanterns:2},
-    {x:.38,label:'PRINTS',lanterns:3},
-    {x:.66,label:'CHARMS',lanterns:2},
-    {x:.86,label:'RELICS',lanterns:1},
-  ];
+  const STALLS=[{x:.1,label:'SCROLLS'},{x:.32,label:'PRINTS'},{x:.56,label:'CHARMS'},{x:.78,label:'RELICS'}];
 
-  // Lanterns on strings
-  const lanterns=[
-    {x:.1,y:.18,ph:0},{x:.22,y:.14,ph:1.2},{x:.38,y:.12,ph:2.4},{x:.5,y:.1,ph:.8},
-    {x:.62,y:.13,ph:1.9},{x:.78,y:.16,ph:3.1},{x:.9,y:.2,ph:.4}
+  // Hanging lanterns
+  const LANS=[
+    {x:.08,y:.15,ph:0},{x:.2,y:.11,ph:1.1},{x:.33,y:.1,ph:2.3},{x:.46,y:.09,ph:.7},
+    {x:.58,y:.11,ph:1.8},{x:.7,y:.13,ph:3.0},{x:.82,y:.12,ph:.3},{x:.93,y:.16,ph:2.1}
   ];
 
   function drawSky(){
     const w=W(),h=H();
-    const g=ctx.createLinearGradient(0,0,0,h*.65);
-    g.addColorStop(0,'#060114');g.addColorStop(.5,'#100830');g.addColorStop(1,'#180d3a');
-    ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+    const g=ctx.createLinearGradient(0,0,0,h*.65);g.addColorStop(0,'#060118');g.addColorStop(.5,'#100830');g.addColorStop(1,'#180d3a');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
     // moon
-    const mx=w*.8,my=h*.22,mr=h*.08;
-    const mg=ctx.createRadialGradient(mx,my,0,mx,my,mr*4);
-    mg.addColorStop(0,'rgba(232,201,122,.1)');mg.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=mg;ctx.fillRect(mx-mr*4,my-mr*4,mr*8,mr*8);
-    ctx.beginPath();ctx.arc(mx,my,mr,0,Math.PI*2);ctx.fillStyle='rgba(248,230,180,.8)';ctx.fill();
-    ctx.beginPath();ctx.arc(mx+mr*.3,my,mr*.8,0,Math.PI*2);ctx.fillStyle='#100830';ctx.fill();
+    const mx=w*.82,my=h*.2,mr=h*.085;
+    const mg=ctx.createRadialGradient(mx,my,0,mx,my,mr*4);mg.addColorStop(0,'rgba(248,224,150,.11)');mg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=mg;ctx.fillRect(mx-mr*4,my-mr*4,mr*8,mr*8);
+    ctx.beginPath();ctx.arc(mx,my,mr,0,Math.PI*2);ctx.fillStyle='rgba(248,230,170,.82)';ctx.fill();
+    ctx.beginPath();ctx.arc(mx+mr*.32,my,mr*.8,0,Math.PI*2);ctx.fillStyle='#100830';ctx.fill();
     // stars
-    for(let i=0;i<50;i++){
-      const sx=Math.sin(i*41.3)*w*.46+w*.5;const sy=Math.cos(i*29.7)*h*.28+h*.15;
-      const sa=Math.sin(tick*.022+i)*.35+.3;
-      ctx.beginPath();ctx.arc(sx,sy,Math.random()<.08?1.4:.6,0,Math.PI*2);
-      ctx.fillStyle=`rgba(220,200,255,${sa})`;ctx.fill();
+    for(let i=0;i<55;i++){
+      const sx=Math.sin(i*37.9+.4)*w*.46+w*.48,sy=Math.cos(i*29.1)*h*.3+h*.14;
+      const sa=Math.sin(tick*.02+i)*.32+.28;
+      ctx.beginPath();ctx.arc(sx,sy,.7,0,Math.PI*2);ctx.fillStyle=`rgba(220,200,255,${sa})`;ctx.fill();
     }
   }
 
   function drawGround(){
     const w=W(),h=H();const gy=h*.7;
-    const g=ctx.createLinearGradient(0,gy,0,h);
-    g.addColorStop(0,'#1e1042');g.addColorStop(1,'#100828');
-    ctx.fillStyle=g;ctx.fillRect(0,gy,w,h-gy);
-    // stone path
-    ctx.fillStyle='rgba(30,16,66,.9)';
-    ctx.beginPath();ctx.moveTo(w*.25,gy);ctx.lineTo(w*.75,gy);ctx.lineTo(w*.85,h);ctx.lineTo(w*.15,h);ctx.closePath();ctx.fill();
-    // path glow lines
-    ctx.strokeStyle='rgba(232,201,122,.06)';ctx.lineWidth=1;
-    [.35,.5,.65].forEach(x=>{ctx.beginPath();ctx.moveTo(x*w,gy);ctx.lineTo((x-.05+.1)*w,h);ctx.stroke();});
-    // market ground glow
-    const gg=ctx.createRadialGradient(w*.5,gy,0,w*.5,gy,w*.5);
-    gg.addColorStop(0,'rgba(232,201,122,.06)');gg.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=gg;ctx.fillRect(0,gy-20,w,h-gy+20);
+    const g=ctx.createLinearGradient(0,gy,0,h);g.addColorStop(0,'#201244');g.addColorStop(1,'#110828');ctx.fillStyle=g;ctx.fillRect(0,gy,w,h-gy);
+    ctx.fillStyle='rgba(28,14,56,.9)';ctx.beginPath();ctx.moveTo(w*.22,gy);ctx.lineTo(w*.78,gy);ctx.lineTo(w*.9,h);ctx.lineTo(w*.1,h);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='rgba(232,201,122,.05)';ctx.lineWidth=1;
+    [.3,.5,.7].forEach(x=>{ctx.beginPath();ctx.moveTo(x*w,gy);ctx.lineTo((x-.04+.08)*w,h);ctx.stroke();});
+    const gg=ctx.createRadialGradient(w*.5,gy,0,w*.5,gy,w*.5);gg.addColorStop(0,'rgba(232,201,122,.07)');gg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=gg;ctx.fillRect(0,gy-20,w,h-gy+20);
   }
 
   function drawStalls(){
     const w=W(),h=H();const gy=h*.7;
-    stalls.forEach(s=>{
-      const sx=s.x*w,sy=gy,sw=w*.14,sh=h*.22;
-      // table
-      ctx.fillStyle='#1a0d38';ctx.fillRect(sx-sw/2,sy,sw,sh*.4);
-      // table surface glow
-      const tg=ctx.createLinearGradient(sx-sw/2,sy,sx+sw/2,sy);
-      tg.addColorStop(0,'rgba(232,201,122,0)');tg.addColorStop(.5,'rgba(232,201,122,.08)');tg.addColorStop(1,'rgba(232,201,122,0)');
-      ctx.fillStyle=tg;ctx.fillRect(sx-sw/2,sy,sw,4);
+    const bright=_stallsActive?1.4:1;
+    STALLS.forEach((s,si)=>{
+      const sx=s.x*w,sw=w*.13,sh=h*.22;
       // canopy
-      ctx.fillStyle='#2d1560';
-      ctx.beginPath();ctx.moveTo(sx-sw*.65,sy);ctx.lineTo(sx+sw*.65,sy);ctx.lineTo(sx+sw*.45,sy-sh*.18);ctx.lineTo(sx-sw*.45,sy-sh*.18);ctx.closePath();ctx.fill();
-      ctx.fillStyle='rgba(155,92,246,.15)';
-      ctx.beginPath();ctx.moveTo(sx-sw*.65,sy);ctx.lineTo(sx+sw*.65,sy);ctx.lineTo(sx+sw*.55,sy-5);ctx.lineTo(sx-sw*.55,sy-5);ctx.closePath();ctx.fill();
-      // label
-      ctx.fillStyle='rgba(232,201,122,.55)';ctx.font=`${Math.max(7,w*.012)}px 'Share Tech Mono',monospace`;ctx.textAlign='center';
-      ctx.fillText(s.label,sx,sy-sh*.22);
-      // items on table (dots as products)
-      const ni=3;for(let i=0;i<ni;i++){
-        const ix=sx-sw*.25+i*sw*.25;const iy=sy+8;
-        const ig=ctx.createRadialGradient(ix,iy,0,ix,iy,8);
-        ig.addColorStop(0,'rgba(192,132,252,.5)');ig.addColorStop(1,'rgba(0,0,0,0)');
-        ctx.fillStyle=ig;ctx.fillRect(ix-8,iy-8,16,16);
-        ctx.beginPath();ctx.arc(ix,iy,3,0,Math.PI*2);ctx.fillStyle='rgba(220,200,255,.7)';ctx.fill();
+      const ca=.55*bright+Math.sin(tick*.015+si)*.05;
+      ctx.fillStyle=`rgba(38,12,82,${Math.min(1,ca)})`;
+      ctx.beginPath();ctx.moveTo(sx-sw*.68,gy);ctx.lineTo(sx+sw*.68,gy);ctx.lineTo(sx+sw*.5,gy-sh*.2);ctx.lineTo(sx-sw*.5,gy-sh*.2);ctx.closePath();ctx.fill();
+      // canopy border glow
+      const cg=ctx.createLinearGradient(sx-sw*.68,gy,sx+sw*.68,gy);cg.addColorStop(0,'rgba(232,201,122,0)');cg.addColorStop(.5,`rgba(232,201,122,${.12*bright})`);cg.addColorStop(1,'rgba(232,201,122,0)');ctx.fillStyle=cg;ctx.fillRect(sx-sw*.7,gy-1.5,sw*1.4,3);
+      // table top
+      ctx.fillStyle='#1e0e42';ctx.fillRect(sx-sw*.5,gy,sw,sh*.32);
+      ctx.strokeStyle=`rgba(232,201,122,${.09*bright})`;ctx.lineWidth=1;ctx.strokeRect(sx-sw*.5,gy,sw,sh*.32);
+      // table surface glow
+      const tg=ctx.createLinearGradient(sx-sw*.5,gy,sx+sw*.5,gy);tg.addColorStop(0,'rgba(232,201,122,0)');tg.addColorStop(.5,`rgba(232,201,122,${.07*bright})`);tg.addColorStop(1,'rgba(232,201,122,0)');ctx.fillStyle=tg;ctx.fillRect(sx-sw*.5,gy,sw,4);
+      // items on table
+      for(let i=0;i<3;i++){
+        const ix=sx-sw*.3+i*sw*.3,iy=gy+sh*.1;
+        const ig=ctx.createRadialGradient(ix,iy,0,ix,iy,7);ig.addColorStop(0,`rgba(192,132,252,${.45*bright})`);ig.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=ig;ctx.fillRect(ix-7,iy-7,14,14);
+        ctx.beginPath();ctx.arc(ix,iy,2.5,0,Math.PI*2);ctx.fillStyle=`rgba(220,200,255,${.65*bright})`;ctx.fill();
       }
+      // label
+      ctx.fillStyle=`rgba(232,201,122,${.5*bright})`;ctx.font=`${Math.max(7,w*.011)}px 'Share Tech Mono',monospace`;ctx.textAlign='center';ctx.fillText(s.label,sx,gy-sh*.23);
       // leg supports
-      ctx.fillStyle='#221148';ctx.fillRect(sx-sw/2,sy,4,sh*.4);ctx.fillRect(sx+sw/2-4,sy,4,sh*.4);
+      ctx.fillStyle='#221148';ctx.fillRect(sx-sw*.5,gy,3,sh*.32);ctx.fillRect(sx+sw*.5-3,gy,3,sh*.32);
     });
   }
 
-  function drawLanternStrings(){
+  function drawLanterns(){
     const w=W(),h=H();
-    // string across top
-    ctx.strokeStyle='rgba(109,40,217,.2)';ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(0,h*.18);ctx.lineTo(w,h*.15);ctx.stroke();
-    lanterns.forEach(l=>{
-      const lx=l.x*w;const base=h*.15+(l.x*w)*(h*.18-h*.15)/w;
-      const swing=Math.sin(tick*.02+l.ph)*.02*w;const lxs=lx+swing;
-      const ly=l.y*h+5;
-      // drop string
-      ctx.strokeStyle='rgba(155,92,246,.2)';ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(lxs,base);ctx.lineTo(lxs,ly);ctx.stroke();
+    // top string line
+    ctx.strokeStyle='rgba(155,92,246,.18)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,h*.15);ctx.lineTo(w,h*.13);ctx.stroke();
+    const bMult=_lanternBright?1.45:1;
+    LANS.forEach(l=>{
+      const lx=l.x*w,base=h*.14;
+      const sw=Math.sin(tick*.018+l.ph)*.025*w;const lxs=lx+sw;
+      const ly=l.y*h+8;const bri=(.65+Math.sin(tick*.022+l.ph)*.3)*bMult;
+      // string
+      ctx.strokeStyle='rgba(155,92,246,.18)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(lxs-sw*.15,base);ctx.lineTo(lxs,ly);ctx.stroke();
       // glow
-      const bri=.7+Math.sin(tick*.025+l.ph)*.3;
-      const lg=ctx.createRadialGradient(lxs,ly,0,lxs,ly,22*bri);
-      lg.addColorStop(0,`rgba(232,201,122,${.45*bri})`);lg.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.fillStyle=lg;ctx.fillRect(lxs-28,ly-28,56,56);
+      const lg=ctx.createRadialGradient(lxs,ly,0,lxs,ly,24*bri);lg.addColorStop(0,`rgba(232,201,122,${.45*bri})`);lg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=lg;ctx.fillRect(lxs-30,ly-30,60,60);
       // body
-      const lh=11,lw=8;
-      ctx.fillStyle=`rgba(232,201,122,${.85*bri})`;
-      ctx.beginPath();
-      if(ctx.roundRect)ctx.roundRect(lxs-lw/2,ly-lh/2,lw,lh,2);
-      else ctx.rect(lxs-lw/2,ly-lh/2,lw,lh);
-      ctx.fill();
-      ctx.fillStyle=`rgba(255,250,220,${.5*bri})`;ctx.fillRect(lxs-3,ly-5,6,10);
-      ctx.fillStyle=`rgba(109,40,217,${.9*bri})`;ctx.fillRect(lxs-4,ly-lh/2-1,8,2);ctx.fillRect(lxs-4,ly+lh/2,8,2);
+      ctx.fillStyle=`rgba(235,210,110,${.82*bri})`;
+      if(ctx.roundRect)ctx.beginPath(),ctx.roundRect(lxs-4,ly-5.5,8,11,2),ctx.fill();
+      else ctx.fillRect(lxs-4,ly-5.5,8,11);
+      ctx.fillStyle=`rgba(255,250,220,${.5*bri})`;ctx.fillRect(lxs-2.5,ly-4.5,5,9);
+      ctx.fillStyle=`rgba(130,80,10,${.9*bri})`;ctx.fillRect(lxs-4,ly-6.5,8,2);ctx.fillRect(lxs-4,ly+5.5,8,2);
       // tassel
-      ctx.strokeStyle=`rgba(232,201,122,${.35*bri})`;ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(lxs,ly+lh/2+2);ctx.lineTo(lxs,ly+lh/2+9);ctx.stroke();
+      ctx.strokeStyle=`rgba(232,201,122,${.3*bri})`;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(lxs,ly+7.5);ctx.lineTo(lxs,ly+14);ctx.stroke();
     });
   }
 
   function drawFox(){
     const w=W(),h=H();
     const fw=20,fh=18;
-    const fx=Math.round(fox.x*w-fw/2);const fy=Math.round(fox.y*h-fh);
+    const fx=Math.round(fox.x*w-fw/2),fy=Math.round(fox.y*h-fh);
     const d=fox.dir;
     const bob=fox.state==='walk'?Math.sin(fox.frame*.8)*1.5:0;
     ctx.save();
     if(d===-1){ctx.translate(fx+fw,fy);ctx.scale(-1,1);}else ctx.translate(fx,fy);
     // tail
     const ts=Math.sin(tick*.04+fox.tail)*7;
-    const tg=ctx.createRadialGradient(-3+ts,fh*.4+bob,0,-3+ts,fh*.4+bob,11);
-    tg.addColorStop(0,'rgba(192,132,252,.85)');tg.addColorStop(.7,'rgba(139,92,246,.5)');tg.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=tg;ctx.beginPath();ctx.ellipse(-3+ts,fh*.4+bob,11,8,Math.PI*.2,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='rgba(240,230,255,.65)';ctx.beginPath();ctx.arc(-3+ts+3,fh*.4-2+bob,3.5,0,Math.PI*2);ctx.fill();
+    const tg=ctx.createRadialGradient(-3+ts,fh*.4+bob,0,-3+ts,fh*.4+bob,12);tg.addColorStop(0,'rgba(192,132,252,.88)');tg.addColorStop(.7,'rgba(139,92,246,.52)');tg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=tg;ctx.beginPath();ctx.ellipse(-3+ts,fh*.4+bob,12,8,Math.PI*.2,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(242,232,255,.65)';ctx.beginPath();ctx.arc(-3+ts+3,fh*.4-2+bob,3.5,0,Math.PI*2);ctx.fill();
     // body
-    ctx.fillStyle='rgba(235,220,255,.95)';ctx.fillRect(2,6+bob,13,9);
-    ctx.fillStyle='rgba(40,10,80,.75)';ctx.fillRect(2,9+bob,13,6);
+    ctx.fillStyle='rgba(236,222,255,.95)';ctx.fillRect(2,6+bob,13,9);
+    ctx.fillStyle='rgba(40,10,80,.78)';ctx.fillRect(2,9+bob,13,6);
     ctx.fillStyle='rgba(232,201,122,.55)';ctx.fillRect(2,9+bob,13,1.5);
     // head
-    ctx.fillStyle='rgba(242,230,255,.95)';ctx.beginPath();ctx.arc(9,3+bob,6,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(242,232,255,.95)';ctx.beginPath();ctx.arc(9,3+bob,6,0,Math.PI*2);ctx.fill();
     // ears
-    ctx.fillStyle='rgba(242,230,255,.9)';
+    ctx.fillStyle='rgba(242,232,255,.9)';
     ctx.beginPath();ctx.moveTo(4,0+bob);ctx.lineTo(2,-5+bob);ctx.lineTo(7,0+bob);ctx.fill();
     ctx.beginPath();ctx.moveTo(14,0+bob);ctx.lineTo(16,-5+bob);ctx.lineTo(11,0+bob);ctx.fill();
     ctx.fillStyle='rgba(155,92,246,.5)';
     ctx.beginPath();ctx.moveTo(4.5,-.5+bob);ctx.lineTo(3,-3.5+bob);ctx.lineTo(6.5,-.5+bob);ctx.fill();
     ctx.beginPath();ctx.moveTo(13.5,-.5+bob);ctx.lineTo(15,-3.5+bob);ctx.lineTo(11.5,-.5+bob);ctx.fill();
     // eye
+    const ex=d===1?11:7;
     if(fox.state!=='sleep'){
-      const ex=d===1?11:7;
-      ctx.fillStyle='rgba(192,132,252,.9)';ctx.beginPath();ctx.ellipse(ex,3.5+bob,1.8,.9,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(192,132,252,.92)';ctx.beginPath();ctx.ellipse(ex,3.5+bob,1.8,.9,0,0,Math.PI*2);ctx.fill();
       ctx.fillStyle='rgba(30,5,60,.9)';ctx.beginPath();ctx.arc(ex+.2,3.5+bob,1,0,Math.PI*2);ctx.fill();
       ctx.fillStyle='rgba(255,255,255,.8)';ctx.beginPath();ctx.arc(ex+.7,3+bob,.38,0,Math.PI*2);ctx.fill();
     } else {
-      ctx.strokeStyle='rgba(192,132,252,.6)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(d===1?11:7,3.5+bob,1.6,Math.PI*.1,Math.PI*.9);ctx.stroke();
+      ctx.strokeStyle='rgba(192,132,252,.55)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(ex,3.5+bob,1.5,Math.PI*.1,Math.PI*.9);ctx.stroke();
     }
-    // forehead rune
-    const runa=.5+Math.sin(tick*.05)*.3;
-    ctx.fillStyle=`rgba(232,201,122,${runa})`;ctx.font='4px serif';ctx.textAlign='center';ctx.fillText('✦',9,1.5+bob);
+    // forehead rune (gold when Etsy connected)
+    const rc=etsyConnected?'rgba(232,201,122,':'rgba(192,132,252,';const ra=.5+Math.sin(tick*.05)*.3;
+    ctx.fillStyle=rc+ra+')';ctx.font='4px serif';ctx.textAlign='center';ctx.fillText('✦',9,1.5+bob);
     // legs
     if(fox.state==='walk'){
       const ls=Math.sin(fox.frame*.6)*.9;
-      ctx.fillStyle='rgba(235,220,255,.78)';
-      ctx.fillRect(3+ls,15+bob,3,4);ctx.fillRect(10-ls,15+bob,3,4);
-      ctx.fillRect(4-ls*.5,13+bob,2,3);ctx.fillRect(11+ls*.5,13+bob,2,3);
+      ctx.fillStyle='rgba(236,222,255,.78)';ctx.fillRect(3+ls,15+bob,3,4);ctx.fillRect(10-ls,15+bob,3,4);ctx.fillRect(4-ls*.5,13+bob,2,3);ctx.fillRect(11+ls*.5,13+bob,2,3);
     } else {
-      ctx.fillStyle='rgba(235,220,255,.7)';
-      ctx.fillRect(3,15+bob,3,4);ctx.fillRect(10,15+bob,3,4);
-      ctx.fillRect(4,13+bob,2,3);ctx.fillRect(11,13+bob,2,3);
+      ctx.fillStyle='rgba(236,222,255,.7)';ctx.fillRect(3,15+bob,3,4);ctx.fillRect(10,15+bob,3,4);ctx.fillRect(4,13+bob,2,3);ctx.fillRect(11,13+bob,2,3);
     }
     // basket (commerce prop)
-    if(fox.state==='walk'||fox.state==='stall'){
-      ctx.fillStyle='rgba(139,92,246,.4)';ctx.fillRect(14,10+bob,6,5);
-      ctx.strokeStyle='rgba(192,132,252,.3)';ctx.lineWidth=1;ctx.strokeRect(14,10+bob,6,5);
-    }
+    ctx.fillStyle='rgba(139,92,246,.42)';ctx.fillRect(14,10+bob,6,5);ctx.strokeStyle='rgba(192,132,252,.28)';ctx.lineWidth=1;ctx.strokeRect(14,10+bob,6,5);
     ctx.restore();
   }
 
   function updateFox(){
-    fox.timer++;fox.tail+=.022;fox.ftimer++;
-    if(fox.ftimer>4){fox.frame++;fox.ftimer=0;}
-    // visit stalls
+    fox.timer++;fox.tail+=.022;fox.ft++;if(fox.ft>4){fox.frame++;fox.ft=0;}
     switch(fox.state){
       case 'walk':
-        fox.x+=fox.dir*.003;
-        if(fox.x>0.9){fox.dir=-1;}if(fox.x<0.1){fox.dir=1;}
-        // approach stalls
-        for(const s of stalls){if(Math.abs(fox.x-s.x)<.04&&fox.timer>80){fox.state='stall';fox.timer=0;break;}}
-        if(fox.timer>220){fox.state=['sit','look'][Math.floor(Math.random()*2)];fox.timer=0;}
+        fox.x+=fox.dir*.0028;
+        if(fox.x>0.92)fox.dir=-1;if(fox.x<0.08)fox.dir=1;
+        for(const s of STALLS){if(Math.abs(fox.x-s.x)<.035&&fox.timer>60){fox.state='stall';fox.timer=0;break;}}
+        if(fox.timer>250){{fox.state=['sit','look'][Math.floor(Math.random()*2)];fox.timer=0;}}
         break;
-      case 'stall':
-        if(fox.timer>120){fox.state='walk';fox.timer=0;}
-        break;
+      case 'stall':if(fox.timer>130){fox.state='walk';fox.timer=0;}break;
       case 'sit':if(fox.timer>160){fox.state='walk';fox.timer=0;}break;
       case 'sleep':if(fox.timer>240){fox.state='walk';fox.timer=0;}break;
-      case 'look':fox.dir=fox.x>.5?-1:1;if(fox.timer>90){fox.state='walk';fox.timer=0;}break;
+      case 'look':fox.dir=fox.x>.5?-1:1;if(fox.timer>85){fox.state='walk';fox.timer=0;}break;
     }
+    // flash signal from UI
+    if(flashTimer>0){flashTimer--;}
   }
 
-  function drawMarketGlow(){
-    const w=W(),h=H();const gy=h*.7;
-    const g=ctx.createRadialGradient(w*.5,gy,0,w*.5,gy,w*.4);
-    g.addColorStop(0,'rgba(109,40,217,.07)');g.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
-  }
-
-  let flashOn=false;
-  window._habFlash=()=>{flashOn=true;setTimeout(()=>flashOn=false,800);};
-
-  function loop(){
-    const w=W(),h=H();
-    ctx.clearRect(0,0,w,h);
-    drawSky();drawGround();drawStalls();drawLanternStrings();drawMarketGlow();drawFox();
-    tick++;updateFox();
+  (function loop(){
+    const w=W(),h=H();ctx.clearRect(0,0,w,h);
+    drawSky();drawGround();drawStalls();drawLanterns();
+    // ground glow pulse when flash
+    if(flashTimer>0){
+      const gp=ctx.createRadialGradient(w*.5,h*.72,0,w*.5,h*.72,w*.4);
+      const alpha=(flashTimer/40)*( flashType==='gold'?.1:.07);
+      gp.addColorStop(0,flashType==='gold'?`rgba(232,201,122,${alpha})`:`rgba(155,92,246,${alpha})`);gp.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=gp;ctx.fillRect(0,0,w,h);
+    }
+    drawFox();tick++;updateFox();
     requestAnimationFrame(loop);
-  }
-  loop();
+  })();
 }
 
 /* ══════════════════════════════════════════════════════
@@ -1206,11 +1122,11 @@ function toggleMute(){
   if(!audioCtx){
     audioCtx=new(window.AudioContext||window.webkitAudioContext)();
     gainNode=audioCtx.createGain();gainNode.gain.value=0;gainNode.connect(audioCtx.destination);
-    [55,82.5,110].forEach(f=>{const o=audioCtx.createOscillator();const g=audioCtx.createGain();g.gain.value=.012;o.frequency.value=f;o.type='sine';o.connect(g);g.connect(gainNode);o.start();});
-    const o2=audioCtx.createOscillator();const g2=audioCtx.createGain();g2.gain.value=.005;o2.frequency.value=432;o2.type='sine';o2.connect(g2);g2.connect(gainNode);o2.start();
+    [55,82.5,110].forEach(f=>{const o=audioCtx.createOscillator();const g=audioCtx.createGain();g.gain.value=.011;o.frequency.value=f;o.type='sine';o.connect(g);g.connect(gainNode);o.start();});
+    const o2=audioCtx.createOscillator(),g2=audioCtx.createGain();g2.gain.value=.004;o2.frequency.value=432;o2.type='sine';o2.connect(g2);g2.connect(gainNode);o2.start();
   }
   muted=!muted;
-  gainNode.gain.setTargetAtTime(muted?0:.25,audioCtx.currentTime,.5);
+  gainNode.gain.setTargetAtTime(muted?0:.22,audioCtx.currentTime,.5);
   btn.textContent=muted?'🔇':'🔊';
 }
 </script>
