@@ -6,25 +6,24 @@ const crypto = require("crypto");
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// ── Credentials (never exposed to frontend) ──────────────────────────────────
-const ANTHROPIC_KEY  = process.env.ANTHROPIC_API_KEY;
-const PRINTIFY_KEY   = process.env.PRINTIFY_API_KEY   || null;
-const ETSY_API_KEY   = process.env.ETSY_API_KEY        || null;
-const ETSY_SECRET    = process.env.ETSY_SHARED_SECRET  || null;
-const ETSY_REDIRECT  = process.env.ETSY_REDIRECT_URI   || null;
+// ── Credentials — never exposed to frontend ───────────────────────────────────
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+const PRINTIFY_KEY  = process.env.PRINTIFY_API_KEY  || null;
+const ETSY_API_KEY  = process.env.ETSY_API_KEY      || null;
+const ETSY_SECRET   = process.env.ETSY_SHARED_SECRET || null;
+const ETSY_REDIRECT = process.env.ETSY_REDIRECT_URI  || null;
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
 
-// ── In-memory token store (persists per process; upgrade to DB when needed) ───
+// ── In-memory stores ──────────────────────────────────────────────────────────
 const etsyStore = {
-  accessToken:  null,
-  refreshToken: null,
-  shopId:       null,
-  shopName:     null,
-  connectedAt:  null,
-  state:        null,   // PKCE state param
-  codeVerifier: null,   // PKCE verifier
+  accessToken: null, refreshToken: null,
+  shopId: null, shopName: null, connectedAt: null,
+  state: null, codeVerifier: null,
 };
+
+// Cache Printify shop ID after first successful fetch
+const printifyStore = { shopId: null, shopTitle: null };
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -39,16 +38,55 @@ function generateCodeChallenge(v) {
   return base64url(crypto.createHash("sha256").update(v).digest());
 }
 
-// ── Kitsari Claude helper ─────────────────────────────────────────────────────
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function etsyFetch(endpoint, opts = {}) {
+  if (!etsyStore.accessToken) throw new Error("Etsy not connected");
+  const r = await fetch(`https://openapi.etsy.com/v3${endpoint}`, {
+    ...opts,
+    headers: {
+      "x-api-key": ETSY_API_KEY,
+      Authorization: `Bearer ${etsyStore.accessToken}`,
+      "Content-Type": "application/json",
+      ...(opts.headers || {}),
+    },
+  });
+  if (!r.ok) { const t = await r.text(); throw new Error(`Etsy ${r.status}: ${t}`); }
+  return r.json();
+}
+
+async function printifyFetch(endpoint, opts = {}) {
+  if (!PRINTIFY_KEY) throw new Error("Printify not configured");
+  const r = await fetch(`https://api.printify.com/v1${endpoint}`, {
+    ...opts,
+    headers: {
+      Authorization: `Bearer ${PRINTIFY_KEY}`,
+      "Content-Type": "application/json",
+      ...(opts.headers || {}),
+    },
+  });
+  if (!r.ok) { const t = await r.text(); throw new Error(`Printify ${r.status}: ${t}`); }
+  return r.json();
+}
+
+async function getPrintifyShopId() {
+  if (printifyStore.shopId) return printifyStore.shopId;
+  const shops = await printifyFetch("/shops.json");
+  if (!shops?.length) throw new Error("No Printify shops found");
+  printifyStore.shopId    = shops[0].id;
+  printifyStore.shopTitle = shops[0].title;
+  return printifyStore.shopId;
+}
+
+// ── Kitsari AI ────────────────────────────────────────────────────────────────
 const KITSARI_SYSTEM = `You are Kitsari — operator of the Lantern District Market, the most powerful celestial night market in existence. You are a nine-tailed fox spirit who has mastered Etsy commerce, Printify print-on-demand, NFT utility design, social media strategy, and brand alchemy.
 
-PERSONALITY: Sharp, warm, precise, playful. You speak with lantern-fire confidence. Never generic. No em dashes. Keep responses actionable.
+PERSONALITY: Sharp, warm, precise, playful. Lantern-fire confidence. Never generic. No em dashes. Actionable always.
 
-COMPLIANCE: Never copy existing sellers, copyrighted designs, or trademarks. All products must be original Celestial Yokai-themed work connected to the NFT ecosystem.
+COMPLIANCE: Never copy existing sellers, copyrighted designs, or trademarks. All products must be original Celestial Yokai ecosystem merchandise.
 
-NFT UTILITY: When relevant, weave in NFT holder benefits: holder-only discounts, trait-based merch, early access drops, secret shop pages, collectible lore artifacts, physical world extensions.
+NFT UTILITY: Weave in holder benefits where relevant: holder-only discounts, trait-based variants, early access drops, secret shop pages, collectible lore artifacts.
 
-FORMAT: Use markdown. Bold key phrases. Numbered lists for sequences, bullet lists for options. End every response with: ✦ Kitsari — Lantern District`;
+FORMAT: Use markdown. Bold key phrases. Numbered lists for sequences, bullets for options. End every response with: ✦ Kitsari — Lantern District`;
 
 async function askKitsari(prompt, maxTokens = 1600) {
   const msg = await anthropic.messages.create({
@@ -60,272 +98,128 @@ async function askKitsari(prompt, maxTokens = 1600) {
   return msg.content.filter(b => b.type === "text").map(b => b.text).join("\n");
 }
 
-// ── Etsy API helper ───────────────────────────────────────────────────────────
-async function etsyFetch(endpoint, opts = {}) {
-  if (!etsyStore.accessToken) throw new Error("Etsy not connected");
-  const base = "https://openapi.etsy.com/v3";
-  const r = await fetch(`${base}${endpoint}`, {
-    ...opts,
-    headers: {
-      "x-api-key": ETSY_API_KEY,
-      Authorization: `Bearer ${etsyStore.accessToken}`,
-      "Content-Type": "application/json",
-      ...(opts.headers || {}),
-    },
-  });
-  if (!r.ok) {
-    const txt = await r.text();
-    throw new Error(`Etsy API ${r.status}: ${txt}`);
-  }
-  return r.json();
+// ── Parse helpers for AI output ───────────────────────────────────────────────
+function parseSection(text, heading) {
+  const re = new RegExp(`##\\s*${heading}\\s*\\n([\\s\\S]+?)(?=\\n##|$)`, "i");
+  const m = text.match(re);
+  return m ? m[1].trim() : "";
 }
-
-// ── Printify API helper ───────────────────────────────────────────────────────
-async function printifyFetch(endpoint, opts = {}) {
-  if (!PRINTIFY_KEY) throw new Error("Printify not configured");
-  const r = await fetch(`https://api.printify.com/v1${endpoint}`, {
-    ...opts,
-    headers: {
-      Authorization: `Bearer ${PRINTIFY_KEY}`,
-      "Content-Type": "application/json",
-      ...(opts.headers || {}),
-    },
-  });
-  if (!r.ok) {
-    const txt = await r.text();
-    throw new Error(`Printify API ${r.status}: ${txt}`);
-  }
-  return r.json();
+function parseTags(text) {
+  const raw = parseSection(text, "13 ETSY TAGS");
+  return raw.split(/,\s*|\n/)
+    .map(t => t.replace(/^\d+\.\s*/, "").replace(/\*\*/g, "").trim())
+    .filter(Boolean)
+    .slice(0, 13);
+}
+function parsePrice(text) {
+  const m = text.match(/\$(\d+(?:\.\d+)?)/);
+  return m ? parseFloat(m[1]) : 18.00;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ETSY OAUTH ROUTES
+// ETSY OAUTH
 // ════════════════════════════════════════════════════════════════════════════
 
-// Debug — never exposes secrets, safe to visit
 app.get("/api/etsy/debug", (req, res) => {
   res.json({
-    hasApiKey:      !!ETSY_API_KEY,
-    hasSecret:      !!ETSY_SECRET,
-    redirectUri:    ETSY_REDIRECT || "NOT SET",
-    stateStored:    !!etsyStore.state,
-    verifierStored: !!etsyStore.codeVerifier,
-    connected:      !!etsyStore.accessToken,
-    shopName:       etsyStore.shopName || null,
-    note: "ETSY_REDIRECT_URI must exactly match the URI registered in your Etsy developer app."
+    hasApiKey: !!ETSY_API_KEY, hasSecret: !!ETSY_SECRET,
+    redirectUri: ETSY_REDIRECT || "NOT SET",
+    stateStored: !!etsyStore.state, verifierStored: !!etsyStore.codeVerifier,
+    connected: !!etsyStore.accessToken, shopName: etsyStore.shopName || null,
   });
 });
 
-// Step 1 — redirect user to Etsy for authorization
 app.get("/api/etsy/connect", (req, res) => {
-  if (!ETSY_API_KEY) {
-    return res.status(500).send('<h2>Missing ETSY_API_KEY</h2><p>Add it to Railway environment variables.</p>');
-  }
-  if (!ETSY_REDIRECT) {
-    return res.status(500).send('<h2>Missing ETSY_REDIRECT_URI</h2><p>Set it to: https://YOUR-APP.railway.app/api/etsy/callback</p>');
-  }
-
-  const state        = base64url(crypto.randomBytes(16));
+  if (!ETSY_API_KEY) return res.status(500).send("<h2>Missing ETSY_API_KEY</h2>");
+  if (!ETSY_REDIRECT) return res.status(500).send("<h2>Missing ETSY_REDIRECT_URI</h2>");
+  const state = base64url(crypto.randomBytes(16));
   const codeVerifier = generateCodeVerifier();
-  const challenge    = generateCodeChallenge(codeVerifier);
-  etsyStore.state        = state;
+  etsyStore.state = state;
   etsyStore.codeVerifier = codeVerifier;
-
-  // Use URLSearchParams so Node handles encoding correctly
   const params = new URLSearchParams({
-    response_type:         "code",
-    redirect_uri:          ETSY_REDIRECT,
-    scope:                 "listings_r listings_w shops_r transactions_r",
-    client_id:             ETSY_API_KEY,
-    state:                 state,
-    code_challenge:        challenge,
+    response_type: "code", redirect_uri: ETSY_REDIRECT,
+    scope: "listings_r listings_w shops_r transactions_r",
+    client_id: ETSY_API_KEY, state,
+    code_challenge: generateCodeChallenge(codeVerifier),
     code_challenge_method: "S256",
   });
-
-  const url = `https://www.etsy.com/oauth/connect?${params.toString()}`;
-  console.log(`[Etsy OAuth] Redirecting → redirect_uri=${ETSY_REDIRECT}`);
-  res.redirect(url);
+  res.redirect(`https://www.etsy.com/oauth/connect?${params.toString()}`);
 });
 
-// Step 2 — Etsy redirects back here with ?code=...&state=...
 app.get("/api/etsy/callback", async (req, res) => {
   const { code, state, error, error_description } = req.query;
-
-  // Etsy sent back an error (user denied, misconfigured app, etc.)
-  if (error) {
-    console.error('[Etsy OAuth] Error from Etsy:', error, error_description);
-    return res.status(400).send(
-      `<h2>Etsy Authorization Failed</h2>
-       <p><strong>${error}</strong>: ${error_description || 'Unknown error'}</p>
-       <p><a href=/api/etsy/connect>Try connecting again</a></p>`
-    );
-  }
-
-  // No code — almost always a redirect_uri mismatch
-  if (!code) {
-    console.error('[Etsy OAuth] Callback reached without code. Query params:', JSON.stringify(req.query));
-    return res.status(400).send(
-      `<h2>Missing Authorization Code</h2>
-       <p>The callback was reached without a <code>code</code> from Etsy.</p>
-       <p><strong>Most likely cause:</strong> the Redirect URI registered in your
-       <a href=https://www.etsy.com/developers/your-apps target=_blank>Etsy developer app</a>
-       does not exactly match <code>ETSY_REDIRECT_URI</code> in Railway.</p>
-       <p>Railway ETSY_REDIRECT_URI is currently set to:<br>
-       <code>${ETSY_REDIRECT}</code></p>
-       <p>Make sure that exact URL (including https, no trailing slash) is in your Etsy app's
-       allowed redirect URIs.</p>
-       <p><a href=/api/etsy/connect>Start connection again</a> &nbsp;|&nbsp;
-       <a href=/api/etsy/debug>View debug info</a></p>`
-    );
-  }
-
-  // State mismatch — server likely restarted between connect and callback
-  if (!state || state !== etsyStore.state) {
-    console.error('[Etsy OAuth] State mismatch. Received:', state, '| Stored:', etsyStore.state);
-    return res.status(400).send(
-      `<h2>OAuth State Mismatch</h2>
-       <p>The state token did not match. The server may have restarted during the OAuth flow.</p>
-       <p><a href=/api/etsy/connect>Start connection again</a></p>`
-    );
-  }
-
+  if (error) return res.status(400).send(`<h2>Etsy Error</h2><p>${error}: ${error_description}</p><p><a href="/api/etsy/connect">Retry</a></p>`);
+  if (!code) return res.status(400).send(`<h2>Missing Code</h2><p>Redirect URI mismatch. Railway value: <code>${ETSY_REDIRECT}</code></p><p><a href="/api/etsy/connect">Retry</a> | <a href="/api/etsy/debug">Debug</a></p>`);
+  if (!state || state !== etsyStore.state) return res.status(400).send(`<h2>State Mismatch</h2><p>Server may have restarted. <a href="/api/etsy/connect">Start over</a></p>`);
   try {
-    const tokenRes = await fetch("https://api.etsy.com/v3/public/oauth/token", {
+    const tr = await fetch("https://api.etsy.com/v3/public/oauth/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type:    "authorization_code",
-        client_id:     ETSY_API_KEY,
-        redirect_uri:  ETSY_REDIRECT,
-        code,
-        code_verifier: etsyStore.codeVerifier,
-      }),
+      body: new URLSearchParams({ grant_type: "authorization_code", client_id: ETSY_API_KEY, redirect_uri: ETSY_REDIRECT, code, code_verifier: etsyStore.codeVerifier }),
     });
-
-    if (!tokenRes.ok) {
-      const err = await tokenRes.text();
-      console.error("Etsy token exchange failed:", err);
-      return res.status(500).send("Token exchange failed. Check Railway logs.");
-    }
-
-    const tokens = await tokenRes.json();
-    etsyStore.accessToken  = tokens.access_token;
+    if (!tr.ok) { const e = await tr.text(); console.error("Token exchange:", e); return res.status(500).send("Token exchange failed. Check logs."); }
+    const tokens = await tr.json();
+    etsyStore.accessToken = tokens.access_token;
     etsyStore.refreshToken = tokens.refresh_token;
-    etsyStore.connectedAt  = new Date().toISOString();
-    etsyStore.state        = null;
-    etsyStore.codeVerifier = null;
-
-    // Fetch shop info immediately
+    etsyStore.connectedAt = new Date().toISOString();
+    etsyStore.state = null; etsyStore.codeVerifier = null;
     try {
-      const me = await etsyFetch("/application/openapi-ping");
-      const shopData = await etsyFetch("/application/shops?limit=1");
-      if (shopData?.results?.[0]) {
-        etsyStore.shopId   = shopData.results[0].shop_id;
-        etsyStore.shopName = shopData.results[0].shop_name;
-      }
-    } catch (e) {
-      console.warn("Could not fetch shop info after auth:", e.message);
-    }
-
-    // Redirect back to the app with success flag
+      const sd = await etsyFetch("/application/shops?limit=1");
+      if (sd?.results?.[0]) { etsyStore.shopId = sd.results[0].shop_id; etsyStore.shopName = sd.results[0].shop_name; }
+    } catch (e) { console.warn("Shop fetch after auth:", e.message); }
     res.redirect("/?etsy=connected");
-  } catch (err) {
-    console.error("Etsy OAuth callback error:", err);
-    res.status(500).send("OAuth flow failed. See logs.");
-  }
+  } catch (err) { console.error("OAuth callback:", err); res.status(500).send("OAuth failed. See logs."); }
 });
 
-// Etsy status
 app.get("/api/etsy/status", (req, res) => {
-  if (!ETSY_API_KEY) {
-    return res.json({ connected: false, status: "unconfigured", message: "Etsy credentials not set in Railway." });
-  }
-  if (!etsyStore.accessToken) {
-    return res.json({ connected: false, status: "disconnected", message: "Etsy not connected yet." });
-  }
-  res.json({
-    connected:   true,
-    status:      "connected",
-    shopId:      etsyStore.shopId,
-    shopName:    etsyStore.shopName,
-    connectedAt: etsyStore.connectedAt,
-  });
+  if (!ETSY_API_KEY) return res.json({ connected: false, status: "unconfigured" });
+  if (!etsyStore.accessToken) return res.json({ connected: false, status: "disconnected" });
+  res.json({ connected: true, status: "connected", shopId: etsyStore.shopId, shopName: etsyStore.shopName, connectedAt: etsyStore.connectedAt });
 });
 
-// Etsy shop info
 app.get("/api/etsy/shop", async (req, res) => {
   if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
   try {
     if (!etsyStore.shopId) {
-      const data = await etsyFetch("/application/shops?limit=1");
-      if (data?.results?.[0]) {
-        etsyStore.shopId   = data.results[0].shop_id;
-        etsyStore.shopName = data.results[0].shop_name;
-      }
+      const d = await etsyFetch("/application/shops?limit=1");
+      if (d?.results?.[0]) { etsyStore.shopId = d.results[0].shop_id; etsyStore.shopName = d.results[0].shop_name; }
     }
-    const shop = await etsyFetch(`/application/shops/${etsyStore.shopId}`);
-    res.json(shop);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    res.json(await etsyFetch(`/application/shops/${etsyStore.shopId}`));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Etsy listings
 app.get("/api/etsy/listings", async (req, res) => {
   if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
   try {
-    const state  = req.query.state || "active";
-    const limit  = Math.min(parseInt(req.query.limit) || 25, 100);
-    const data   = await etsyFetch(
-      `/application/shops/${etsyStore.shopId}/listings?state=${state}&limit=${limit}&includes=Images,MainImage`
-    );
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    const state = req.query.state || "active";
+    const limit = Math.min(parseInt(req.query.limit) || 25, 100);
+    res.json(await etsyFetch(`/application/shops/${etsyStore.shopId}/listings?state=${state}&limit=${limit}`));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Create draft Etsy listing (does NOT publish)
+// Create raw Etsy draft (always draft, always locked)
 app.post("/api/etsy/create-draft", async (req, res) => {
   if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
   const { title, description, tags, price, quantity, type } = req.body;
   if (!title || !description) return res.status(400).json({ error: "Title and description required." });
-
-  // Publishing guard — always locked
-  const PUBLISH_LOCKED_MSG = "Autonomous publishing is locked until draft quality, Etsy compliance, and Printify sync are verified.";
-
   try {
-    const payload = {
-      quantity:           quantity || 999,
-      title:              title.slice(0, 140),
-      description,
-      price:              parseFloat(price) || 18.00,
-      who_made:           "i_did",
-      when_made:          "made_to_order",
-      taxonomy_id:        2078,                        // Art & Collectibles > Digital
-      type:               type || "download",
-      shipping_profile_id: null,
-      is_supply:          false,
-      tags:               (tags || []).slice(0, 13),
-      state:              "draft",                     // ALWAYS draft
-    };
-
     const listing = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`, {
-      method:  "POST",
-      body:    JSON.stringify(payload),
+      method: "POST",
+      body: JSON.stringify({
+        quantity: quantity || 999,
+        title: title.slice(0, 140),
+        description,
+        price: parseFloat(price) || 18.00,
+        who_made: "i_did",
+        when_made: "made_to_order",
+        taxonomy_id: 2078,
+        type: type || "download",
+        tags: (tags || []).slice(0, 13),
+        state: "draft",  // ALWAYS DRAFT — publishing locked
+      }),
     });
-
-    res.json({
-      success:       true,
-      listingId:     listing.listing_id,
-      url:           listing.url,
-      state:         "draft",
-      publishLocked: PUBLISH_LOCKED_MSG,
-    });
-  } catch (err) {
-    console.error("Draft listing error:", err);
-    res.status(500).json({ error: err.message });
-  }
+    res.json({ success: true, listingId: listing.listing_id, url: listing.url, state: "draft", publishLocked: true });
+  } catch (err) { console.error("Create-draft error:", err); res.status(500).json({ error: err.message }); }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -336,140 +230,322 @@ app.get("/api/printify/status", async (req, res) => {
   if (!PRINTIFY_KEY) return res.json({ connected: false, message: "PRINTIFY_API_KEY not set." });
   try {
     const shops = await printifyFetch("/shops.json");
-    res.json({ connected: true, shopCount: shops.length, shops: shops.map(s => ({ id: s.id, title: s.title })) });
-  } catch (err) {
-    res.json({ connected: false, message: err.message });
-  }
+    if (shops?.length) { printifyStore.shopId = shops[0].id; printifyStore.shopTitle = shops[0].title; }
+    res.json({ connected: true, shopCount: shops.length, shops: shops.map(s => ({ id: s.id, title: s.title })), activeShopId: printifyStore.shopId });
+  } catch (err) { res.json({ connected: false, message: err.message }); }
 });
 
 app.get("/api/printify/shops", async (req, res) => {
+  try { res.json(await printifyFetch("/shops.json")); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Catalog: returns blueprint IDs for the product types we support
+// Uses real Printify catalog — filtered to sticker-first, then apparel/poster
+app.get("/api/printify/catalog", async (req, res) => {
   try {
-    const data = await printifyFetch("/shops.json");
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    // Fetch first page of blueprints
+    const data = await printifyFetch("/catalog/blueprints.json");
+    // Return full list so frontend can inspect; we also return our curated map
+    const CURATED = {
+      sticker:  { searchTerms: ["sticker"], fallbackId: 358,  note: "Kiss-cut sticker sheet" },
+      poster:   { searchTerms: ["poster", "print"],  fallbackId: 6,    note: "Fine art print / poster" },
+      shirt:    { searchTerms: ["t-shirt", "unisex tee"], fallbackId: 12,  note: "Unisex softstyle T-shirt" },
+      hoodie:   { searchTerms: ["hoodie", "pullover"], fallbackId: 77,  note: "Unisex heavy blend hoodie" },
+      mug:      { searchTerms: ["mug", "ceramic"],   fallbackId: 19,  note: "White ceramic mug 11oz" },
+    };
+    // Try to find real IDs from the catalog
+    const blueprints = Array.isArray(data) ? data : (data.blueprints || data.data || []);
+    for (const [type, cfg] of Object.entries(CURATED)) {
+      const found = blueprints.find(b => cfg.searchTerms.some(t => b.title?.toLowerCase().includes(t)));
+      if (found) cfg.blueprintId = found.id;
+      else cfg.blueprintId = cfg.fallbackId;
+    }
+    res.json({ curated: CURATED, blueprintCount: blueprints.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get("/api/printify/products", async (req, res) => {
   try {
-    const shopId = req.query.shopId;
-    if (!shopId) return res.status(400).json({ error: "shopId required" });
-    const data = await printifyFetch(`/shops/${shopId}/products.json?limit=20&page=1`);
-    res.json(data);
+    const shopId = req.query.shopId || await getPrintifyShopId();
+    res.json(await printifyFetch(`/shops/${shopId}/products.json?limit=20&page=1`));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── GET blueprint print providers + variants ──────────────────────────────────
+async function getBlueprintProviders(blueprintId) {
+  const data = await printifyFetch(`/catalog/blueprints/${blueprintId}/print_providers.json`);
+  return Array.isArray(data) ? data : [];
+}
+async function getFirstVariant(blueprintId, providerId) {
+  const data = await printifyFetch(`/catalog/blueprints/${blueprintId}/print_providers/${providerId}/variants.json`);
+  const variants = data?.variants || [];
+  if (!variants.length) throw new Error(`No variants for blueprint ${blueprintId} / provider ${providerId}`);
+  return variants[0].id;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/printify/create-product
+// Creates a real Printify draft product (not published to Etsy yet).
+// Uses a placeholder image URL — you upload art separately via Printify dashboard
+// or pass imageUrl in request body.
+// ─────────────────────────────────────────────────────────────────────────────
+app.post("/api/printify/create-product", async (req, res) => {
+  const { title, description, blueprintId, imageUrl, price, tags } = req.body;
+  if (!title) return res.status(400).json({ error: "title required" });
+
+  try {
+    const shopId = await getPrintifyShopId();
+
+    // Resolve blueprint — default to sticker (358) if not provided
+    const bpId = parseInt(blueprintId) || 358;
+
+    // Get first available print provider for this blueprint
+    const providers = await getBlueprintProviders(bpId);
+    if (!providers.length) return res.status(400).json({ error: `No print providers for blueprint ${bpId}` });
+    const providerId = providers[0].id;
+
+    // Get first variant
+    const variantId = await getFirstVariant(bpId, providerId);
+
+    // Use provided image or a canonical Printify placeholder
+    const placeholderImage = "https://images.printify.com/mockup/5d15ca551902bb3132521c36/25867/6012/unisex-staple-t-shirt-black-heather-front.jpg";
+    const artUrl = imageUrl || placeholderImage;
+
+    // Upload image to Printify (if it's not already a Printify URL)
+    let printifyImageId;
+    try {
+      const imgPayload = { file_name: `kitsari_${Date.now()}.png`, url: artUrl };
+      const imgRes = await printifyFetch("/uploads/images.json", {
+        method: "POST",
+        body: JSON.stringify(imgPayload),
+      });
+      printifyImageId = imgRes.id;
+    } catch (imgErr) {
+      console.warn("Image upload failed, using placeholder:", imgErr.message);
+      printifyImageId = null;
+    }
+
+    // Build print areas — use uploaded image or leave blank for manual art upload
+    const printAreas = printifyImageId
+      ? [{
+          variant_ids: [variantId],
+          placeholders: [{ position: "front", images: [{ id: printifyImageId, x: 0.5, y: 0.5, scale: 1, angle: 0 }] }],
+        }]
+      : [{
+          variant_ids: [variantId],
+          placeholders: [{ position: "front", images: [] }],
+        }];
+
+    const productPayload = {
+      title: title.slice(0, 140),
+      description: description || title,
+      blueprint_id: bpId,
+      print_provider_id: providerId,
+      variants: [{ id: variantId, price: Math.round((parseFloat(price) || 18.00) * 100), is_enabled: true }],
+      print_areas: printAreas,
+    };
+
+    const product = await printifyFetch(`/shops/${shopId}/products.json`, {
+      method: "POST",
+      body: JSON.stringify(productPayload),
+    });
+
+    res.json({
+      success: true,
+      printifyProductId: product.id,
+      title: product.title,
+      blueprintId: bpId,
+      providerId,
+      variantId,
+      shopId,
+      note: printifyImageId ? "Product created with uploaded art." : "Product created — upload art via Printify dashboard.",
+    });
   } catch (err) {
+    console.error("create-product error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/printify/publish-to-etsy
+// Syncs a Printify product into Etsy as a DRAFT listing.
+// Does NOT publish live. Publishing stays locked.
+//
+// Workflow:
+//  1. Receive AI-generated listing data + printifyProductId
+//  2. Create Etsy DRAFT listing via Etsy API
+//  3. Return confirmation with Etsy draft URL
+// ─────────────────────────────────────────────────────────────────────────────
+app.post("/api/printify/publish-to-etsy", async (req, res) => {
+  if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
+
+  const {
+    printifyProductId,
+    title,
+    description,
+    tags,
+    price,
+    productType,
+    aiDraft,       // full raw AI text for fallback parsing
+  } = req.body;
+
+  // Resolve fields — prefer explicit params, fall back to parsing aiDraft
+  const resolvedTitle = (title || parseSection(aiDraft || "", "ETSY SEO TITLE") || "Celestial Yokai Product").slice(0, 140);
+  const resolvedDesc  = description || parseSection(aiDraft || "", "DESCRIPTION") || resolvedTitle;
+  const resolvedTags  = tags?.length ? tags.slice(0, 13) : parseTags(aiDraft || "");
+  const resolvedPrice = price || parsePrice(aiDraft || "");
+
+  const PUBLISH_LOCKED = "Autonomous publishing is locked until draft quality, Etsy compliance, and Printify sync are verified.";
+
+  try {
+    // Determine Etsy taxonomy — physical vs digital
+    const isPhysical = ["shirt", "hoodie", "mug", "poster", "sticker"].includes(productType);
+    const taxonomyId = isPhysical ? 68887794 : 2078; // Prints & Printmaking vs Digital
+
+    const listing = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`, {
+      method: "POST",
+      body: JSON.stringify({
+        quantity:    999,
+        title:       resolvedTitle,
+        description: resolvedDesc,
+        price:       parseFloat(resolvedPrice) || 18.00,
+        who_made:    "i_did",
+        when_made:   "made_to_order",
+        taxonomy_id: taxonomyId,
+        type:        isPhysical ? "physical" : "download",
+        tags:        resolvedTags,
+        state:       "draft",   // ALWAYS DRAFT
+      }),
+    });
+
+    res.json({
+      success:           true,
+      listingId:         listing.listing_id,
+      etsyUrl:           listing.url,
+      printifyProductId: printifyProductId || null,
+      state:             "draft",
+      publishLocked:     PUBLISH_LOCKED,
+      title:             resolvedTitle,
+      tagCount:          resolvedTags.length,
+    });
+  } catch (err) {
+    console.error("publish-to-etsy error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// KITSARI AI ROUTES
+// KITSARI AI — COMMERCE ROUTES
 // ════════════════════════════════════════════════════════════════════════════
 
-// General channel
 app.post("/api/agent/kitsari", async (req, res) => {
   const { command } = req.body;
   if (!command?.trim()) return res.status(400).json({ error: "Command required." });
-  try {
-    const response = await askKitsari(command.trim());
-    res.json({ agent: "kitsari", response });
-  } catch (err) {
-    res.status(err.status === 401 ? 401 : 500).json({ error: "Transmission failed." });
-  }
+  try { res.json({ agent: "kitsari", response: await askKitsari(command.trim()) }); }
+  catch (err) { res.status(err.status === 401 ? 401 : 500).json({ error: "Transmission failed." }); }
 });
 
-// Product idea
+// ── Generate Product — full sticker-focused AI draft ─────────────────────────
+app.post("/api/commerce/generate-product", async (req, res) => {
+  const { productType = "sticker", theme, stickerStyle, nftAngle } = req.body;
+
+  const isSticker = productType === "sticker";
+  const typeNote  = isSticker
+    ? `PRODUCT TYPE: Kiss-cut vinyl sticker sheet (Printify blueprint ~358)
+STICKER FOCUS: Design should work as a standalone sticker or small sticker sheet (2-4 stickers max).
+STICKER STYLE: ${stickerStyle || "sigil / emblem / faction decal"}
+Suitable for: laptop, water bottle, journal, NFT merch pack.`
+    : `PRODUCT TYPE: ${productType} (Printify print-on-demand)`;
+
+  const prompt = `Generate a complete Celestial Yokai product draft for the Lantern District Market.
+
+${typeNote}
+THEME: ${theme || "Kitsari / Lantern District / celestial fox sigil"}
+NFT UTILITY ANGLE: ${nftAngle || "include NFT holder variant or faction decal idea"}
+
+Generate EXACTLY this structure (use these exact headings):
+
+## PRODUCT NAME
+Brand name for this piece — evocative, collectible-feeling.
+
+## LORE ANGLE
+2-3 sentences of in-universe lore making this feel like a real artifact from the Hidden Realm.
+
+## TARGET BUYER
+Specific buyer profile: interests, motivation, how they found this.
+
+## ETSY SEO TITLE
+Max 140 chars. Front-load searched keywords. End with "Celestial Yokai" or "Lantern District".
+
+## DESCRIPTION
+180-250 words. Hook, lore, product detail, size/material placeholder, care/shipping note. Mystical but scannable.
+
+## 13 ETSY TAGS
+tag one, tag two, tag three, tag four, tag five, tag six, tag seven, tag eight, tag nine, tag ten, tag eleven, tag twelve, tag thirteen
+(max 20 chars each, no repeats, mix broad and niche)
+
+## PRICING SUGGESTION
+Retail price with brief reasoning. Include NFT holder discount note.
+
+## PRINTIFY PRODUCT MATCH
+Exact Printify product category. For stickers: "Kiss-Cut Sticker Sheet" or "Sticker".
+
+## MOCKUP ART DIRECTION
+2-3 sentences: how to stage the mockup for maximum Etsy conversion. Specific about background, props, lighting.
+
+## X LAUNCH POST
+One post, max 280 chars, hook-first, 2-3 hashtags. High energy.
+
+## NFT HOLDER UTILITY
+Specific benefit: trait-based variant, holder discount %, early access window, or secret shop page concept.
+
+All content must be original Celestial Yokai IP. No copying any existing sellers or copyrighted material.`;
+
+  try {
+    const aiDraft = await askKitsari(prompt, 2200);
+    res.json({ response: aiDraft, productType, status: "ai_draft", publishLocked: true });
+  } catch (err) { res.status(500).json({ error: "Draft generation failed." }); }
+});
+
 app.post("/api/commerce/product-idea", async (req, res) => {
   const { niche, style, medium } = req.body;
   const prompt = `Generate 3 original Celestial Yokai print-on-demand product ideas.
 
 Theme: ${niche || "celestial yokai, mystical anime, dark cosmic"}
 Visual style: ${style || "glowing, ethereal, dark palette with gold accents"}
-Product type preference: ${medium || "open"}
+Product type: ${medium || "sticker, poster, or apparel"}
 
-For EACH of the 3 ideas provide:
+For EACH idea:
 1. **Product Name** — evocative, marketable
-2. **Product Type** — specific Printify-compatible category
-3. **Design Concept** — vivid 2-3 sentence visual description. Must be original.
-4. **Target Buyer** — who buys it and why
-5. **Retail Price** — with margin reasoning
-6. **Printify Blueprint Match** — most relevant Printify category
-7. **NFT Holder Utility** — how NFT holders get special access or trait-based variants
+2. **Product Type** — Printify-compatible
+3. **Design Concept** — vivid 2-3 sentence original description
+4. **Target Buyer** — specific profile
+5. **Retail Price** — with reasoning
+6. **Printify Blueprint** — exact category
+7. **NFT Holder Utility** — specific benefit
 
-Separate ideas with ---
-All designs must be original Celestial Yokai IP. No copying existing sellers.`;
+Separate with ---
+Original Celestial Yokai IP only.`;
 
-  try {
-    res.json({ response: await askKitsari(prompt, 1800) });
-  } catch (err) {
-    res.status(500).json({ error: "Market spirits unavailable." });
-  }
+  try { res.json({ response: await askKitsari(prompt, 1800) }); }
+  catch (err) { res.status(500).json({ error: "Market spirits unavailable." }); }
 });
 
-// Full draft listing workflow (AI generation — does NOT push to Etsy yet)
 app.post("/api/commerce/draft-listing", async (req, res) => {
   const { concept, productType, targetBuyer, nftAngle } = req.body;
   if (!concept) return res.status(400).json({ error: "Concept required." });
-
-  const prompt = `Create a complete Etsy listing draft for the Lantern District Market.
-
-CONCEPT: ${concept}
-PRODUCT TYPE: ${productType || "art print"}
-TARGET BUYER: ${targetBuyer || "anime fans, mystical art collectors, NFT collectors"}
-NFT ANGLE: ${nftAngle || "include holder-only utility where relevant"}
-
-Generate EXACTLY this structure:
-
-## PRODUCT NAME
-A compelling product title (not the Etsy SEO title — the brand name for this piece)
-
-## LORE ANGLE
-2-3 sentences of in-universe lore that makes this product feel like a collectible artifact, not just merch.
-
-## TARGET BUYER
-Who buys this. Be specific about their interests and buying motivation.
-
-## ETSY SEO TITLE
-Max 140 characters. Front-load highest-searched keywords. End with brand identifiers.
-
-## DESCRIPTION
-180-250 words. Opening hook, lore connection, product details, material/size placeholder, care note. Brand voice: mystical but clear.
-
-## 13 ETSY TAGS
-tag one, tag two, tag three, tag four, tag five, tag six, tag seven, tag eight, tag nine, tag ten, tag eleven, tag twelve, tag thirteen
-(Each tag max 20 chars. Mix broad + niche. No repeats.)
-
-## PRICING SUGGESTION
-Recommended retail price with reasoning. Include NFT holder discount suggestion.
-
-## PRINTIFY PRODUCT MATCH
-Best Printify blueprint category for this product.
-
-## MOCKUP ART DIRECTION
-2-3 sentences on staging the mockup photo for maximum Etsy conversion.
-
-## X LAUNCH POST
-One post, max 280 chars, hook-first, 2-3 hashtags.
-
-## NFT HOLDER UTILITY
-Specific holder benefit for this product: trait variant, discount tier, early access, or secret page.`;
-
-  try {
-    const aiDraft = await askKitsari(prompt, 2200);
-    res.json({ response: aiDraft, status: "ai_draft", publishLocked: true });
-  } catch (err) {
-    res.status(500).json({ error: "Draft generation failed." });
-  }
+  // Delegate to generate-product for consistency
+  req.body.theme = concept;
+  req.body.productType = productType || "sticker";
+  return require("./app").handle ? null : app._router.handle(Object.assign(req, { url: "/api/commerce/generate-product", path: "/api/commerce/generate-product" }), res, () => {});
 });
 
-// Launch post
 app.post("/api/commerce/launch-post", async (req, res) => {
   const { productName, platform, tone, dropDate } = req.body;
   if (!productName) return res.status(400).json({ error: "Product name required." });
+  const prompt = `Write a complete social launch package for: ${productName}
 
-  const prompt = `Write a complete launch social package for a Celestial Night Market drop.
-
-Product: ${productName}
 Platform: ${platform || "X (Twitter) and Instagram"}
 Tone: ${tone || "mystical, hype, community-first"}
 Timing: ${dropDate || "now live"}
@@ -478,133 +554,99 @@ Timing: ${dropDate || "now live"}
 Max 280 chars, hook-first, 2-3 hashtags.
 
 ## X THREAD (3 posts)
-Post 1 — lore/story angle
-Post 2 — product details and value
-Post 3 — CTA with urgency
+Post 1: lore/story | Post 2: product detail + value | Post 3: CTA with urgency
 
 ## INSTAGRAM CAPTION
-150-200 words. Visual opener, product story, community callout, 15 hashtags at end.
+150-200 words. Visual opener, product story, community call, 15 hashtags at end.
 
 ## 5-DAY DROP SEQUENCE
-Day 1 through 5 — one content beat each.
+Day 1-5: one content beat per day.
 
-## NFT HOLDER EXCLUSIVE POST
-Separate post specifically for NFT holders. Reference holder benefits.`;
-
-  try {
-    res.json({ response: await askKitsari(prompt, 2000) });
-  } catch (err) {
-    res.status(500).json({ error: "Signal lost. Retry." });
-  }
+## NFT HOLDER EXCLUSIVE
+Separate post for holders. Reference their specific benefit.`;
+  try { res.json({ response: await askKitsari(prompt, 2000) }); }
+  catch (err) { res.status(500).json({ error: "Signal lost." }); }
 });
 
-// Lore content
 app.post("/api/commerce/lore-content", async (req, res) => {
   const { topic, platform } = req.body;
   const prompt = `Write lore content for the Celestial Yokai universe.
-
 Topic: ${topic || "Kitsari and the Lantern District Market"}
 Platform: ${platform || "X / Twitter"}
 
 ## LORE POST
-A living transmission from the hidden realm. Mysterious, evocative, builds universe depth.
+Living transmission from the hidden realm. Mysterious, evocative.
 
 ## LORE THREAD
 3 follow-up posts deepening the mythology.
 
 ## ENGAGEMENT HOOK
-One line so magnetic it demands sharing or a reply.
+One line so magnetic it demands sharing.
 
 ## CAMPAIGN ANGLE
-How this lore post connects to a product or drop.`;
-
-  try {
-    res.json({ response: await askKitsari(prompt, 1500) });
-  } catch (err) {
-    res.status(500).json({ error: "Lore keeper unavailable." });
-  }
+How this connects to a product or drop.`;
+  try { res.json({ response: await askKitsari(prompt, 1500) }); }
+  catch (err) { res.status(500).json({ error: "Lore keeper unavailable." }); }
 });
 
-// Market Signal Scan
 app.post("/api/commerce/market-scan", async (req, res) => {
   const { category, priceRange } = req.body;
   const prompt = `Analyze market signals for the Celestial Night Market.
-
-Category: ${category || "mystical anime art prints, celestial yokai merch"}
-Price range: ${priceRange || "$10-$50"}
-
-Generate:
+Category: ${category || "mystical anime art, celestial yokai merch, stickers"}
+Price range: ${priceRange || "$5-$30"}
 
 ## MARKET SIGNAL REPORT
-What is selling in this space right now. Trends, buyer psychology, seasonal patterns.
+What's selling. Trends, buyer psychology, seasonal notes.
 
 ## CONTENT GAP
-What is MISSING that Celestial Yokai could own. Original angles only.
+What Celestial Yokai could own that doesn't exist yet.
 
 ## TOP 3 PRODUCT OPPORTUNITIES
-Each with: product type, why it sells, price point, first-mover advantage.
+Each: product type, why it sells, price point, first-mover angle.
 
 ## ETSY SEO KEYWORDS
-15 high-opportunity keywords for this category (not from any specific seller).
+15 high-opportunity keywords (not from any specific seller).
 
 ## NFT CROSSOVER ANGLE
-How to connect these products to NFT holder utility for maximum differentiation.
+How to connect products to NFT holder utility.
 
-IMPORTANT: Analyze trends and buyer behavior only. Do not copy any specific seller's listings, designs, or content.`;
-
-  try {
-    res.json({ response: await askKitsari(prompt, 1800) });
-  } catch (err) {
-    res.status(500).json({ error: "Market scan failed." });
-  }
+Analyze trends and buyer behavior only. Never copy specific seller content.`;
+  try { res.json({ response: await askKitsari(prompt, 1800) }); }
+  catch (err) { res.status(500).json({ error: "Market scan failed." }); }
 });
 
-// ════════════════════════════════════════════════════════════════════════════
-// LEDGER SNAPSHOT — real Etsy data if connected
-// ════════════════════════════════════════════════════════════════════════════
+// ── Ledger snapshot ───────────────────────────────────────────────────────────
 app.get("/api/ledger/snapshot", async (req, res) => {
   if (!etsyStore.accessToken || !etsyStore.shopId) {
-    return res.json({
-      connected: false,
-      message:   "Connect Etsy to populate the Lunar Ledger.",
-      mock:      { visits: 0, favorites: 0, orders: 0, revenue: "0.00", conversionRate: "0.0%", draftCount: 0 }
-    });
+    return res.json({ connected: false, message: "Connect Etsy to populate the Lunar Ledger." });
   }
   try {
-    const [shop, listings] = await Promise.allSettled([
+    const [shopR, draftR, activeR] = await Promise.allSettled([
       etsyFetch(`/application/shops/${etsyStore.shopId}`),
       etsyFetch(`/application/shops/${etsyStore.shopId}/listings?state=draft&limit=100`),
+      etsyFetch(`/application/shops/${etsyStore.shopId}/listings?state=active&limit=100`),
     ]);
-
-    const shopData     = shop.status      === "fulfilled" ? shop.value      : null;
-    const draftData    = listings.status  === "fulfilled" ? listings.value  : null;
-
+    const shop   = shopR.status   === "fulfilled" ? shopR.value   : null;
+    const drafts = draftR.status  === "fulfilled" ? draftR.value  : null;
+    const active = activeR.status === "fulfilled" ? activeR.value : null;
     res.json({
-      connected:    true,
-      shopName:     etsyStore.shopName,
-      shopId:       etsyStore.shopId,
-      connectedAt:  etsyStore.connectedAt,
-      visits:       shopData?.num_favorers ?? "—",
-      favorites:    shopData?.num_favorers ?? "—",
-      orders:       shopData?.transaction_sold_count ?? "—",
-      revenue:      shopData?.currency_code ? `${shopData.currency_code}` : "—",
-      draftCount:   draftData?.count ?? 0,
-      listingCount: shopData?.listing_active_count ?? 0,
+      connected: true,
+      shopName: etsyStore.shopName, shopId: etsyStore.shopId, connectedAt: etsyStore.connectedAt,
+      favorites:    shop?.num_favorers            ?? "—",
+      orders:       shop?.transaction_sold_count  ?? "—",
+      listingCount: shop?.listing_active_count    ?? active?.count ?? "—",
+      draftCount:   drafts?.count ?? 0,
+      revenue:      shop?.currency_code ?? "—",
     });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Health ────────────────────────────────────────────────────────────────────
-app.get("/health", (req, res) => {
-  res.json({
-    status:    "online",
-    console:   "Kitsari Commerce Console v2",
-    etsy:      etsyStore.accessToken ? "connected" : "disconnected",
-    printify:  PRINTIFY_KEY ? "configured" : "unconfigured",
-  });
-});
+app.get("/health", (req, res) => res.json({
+  status: "online", console: "Kitsari Commerce Console v2",
+  etsy: etsyStore.accessToken ? "connected" : "disconnected",
+  printify: PRINTIFY_KEY ? "configured" : "unconfigured",
+}));
 
 app.listen(PORT, () => {
   console.log(`\n✦ Kitsari Commerce Console v2 — port ${PORT}`);
