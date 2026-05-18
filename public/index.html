@@ -29,9 +29,9 @@ body::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opa
   background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:180px}
 
 /* GATE */
-#gate{position:fixed;inset:0;z-index:9999;background:radial-gradient(ellipse at 50% 40%,#100528 0%,#030108 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2rem;text-align:center;padding:2rem;transition:opacity 0.5s ease;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-#gate.out{opacity:0;pointer-events:none}
-#gate.gone{display:none!important}
+#gate{display:none}
+
+
 .gate-runes{font-size:1.1rem;letter-spacing:.5em;opacity:.22;animation:rd 6s ease-in-out infinite}
 @keyframes rd{0%,100%{letter-spacing:.5em;opacity:.22}50%{letter-spacing:.7em;opacity:.42}}
 .gate-icon{font-size:4rem;filter:drop-shadow(0 0 28px rgba(232,201,122,.75));animation:gi 4s ease-in-out infinite}
@@ -48,8 +48,7 @@ body::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opa
 #bg-canvas{z-index:0}#fx-canvas{z-index:2}
 
 /* APP */
-#app{position:relative;z-index:10;max-width:780px;margin:0 auto;padding:0 1rem 4rem;display:none}
-#app.show{display:block}
+#app{position:relative;z-index:10;max-width:780px;margin:0 auto;padding:0 1rem 4rem}
 
 /* HEADER */
 .hdr{text-align:center;padding:2rem 1rem 1.8rem;border-bottom:1px solid var(--bordergold);margin-bottom:2rem;position:relative}
@@ -309,7 +308,7 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
 </head>
 <body>
 
-<div id="gate" onclick="gateAreaClick(event)">
+<div id="gate" style="display:none" aria-hidden="true">
   <div class="gate-runes">⛩ ✦ 狐 ✦ 商 ✦ ⛩</div>
   <div class="gate-icon">🏮</div>
   <h1 class="gate-title">Kitsari Commerce Console<br><span style="font-size:.62em;opacity:.65">Lantern District Market</span></h1>
@@ -325,7 +324,7 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
 
 <div id="app">
   <header class="hdr">
-    <div class="hdr-badge"><span class="hdr-pip"></span><span class="hdr-badge-txt">COMMERCE CONSOLE v2 // LANTERN DISTRICT MARKET // LIVE</span></div>
+    <div class="hdr-badge"><span class="hdr-pip"></span><span class="hdr-badge-txt">LANTERN DISTRICT MARKET // LIVE ✦</span></div>
     <h1 class="hdr-title">Kitsari Commerce Console</h1>
     <div class="hdr-v">✦ v2 — Etsy + Printify + Claude ✦</div>
     <p class="hdr-sub">Lantern District Market</p>
@@ -812,22 +811,7 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
 ════════════════════════════════════════════════════════ */
 
 /* ── GATE ──────────────────────────────────────────────── */
-var _marketEntered=false;
-function gateAreaClick(e){
-  // Fallback: tap anywhere in lower half of gate = enter
-  if(e.target.id==='gate'&&e.clientY>window.innerHeight*.4)enterRealm();
-}
-function enterRealm(){
-  if(_marketEntered)return;
-  _marketEntered=true;
-  console.log('Market opened');
-  var gate=document.getElementById('gate');
-  var appEl=document.getElementById('app');
-  // Show app immediately — no transition delay
-  appEl.classList.add('show');
-  // Fade gate out
-  gate.classList.add('out');
-  setTimeout(function(){gate.classList.add('gone');},550);
+function enterRealm(){} // no-op: gate removed,550);
   // Boot after next paint so app is visible first
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){
@@ -836,6 +820,12 @@ function enterRealm(){
   });
 }
 function boot(){initBg();initFx();initHabitat();initClock();checkAllConnections();handleOAuthReturn();}
+// Auto-boot immediately — no gate required
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',boot);
+}else{
+  boot();
+}
 
 /* ── OAUTH RETURN ──────────────────────────────────────── */
 function handleOAuthReturn(){
