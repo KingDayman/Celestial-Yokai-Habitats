@@ -102,48 +102,91 @@ async function printifyFetch(endpoint, opts = {}) {
 // ETSY OAUTH ROUTES
 // ════════════════════════════════════════════════════════════════════════════
 
+// Debug — never exposes secrets, safe to visit
+app.get("/api/etsy/debug", (req, res) => {
+  res.json({
+    hasApiKey:      !!ETSY_API_KEY,
+    hasSecret:      !!ETSY_SECRET,
+    redirectUri:    ETSY_REDIRECT || "NOT SET",
+    stateStored:    !!etsyStore.state,
+    verifierStored: !!etsyStore.codeVerifier,
+    connected:      !!etsyStore.accessToken,
+    shopName:       etsyStore.shopName || null,
+    note: "ETSY_REDIRECT_URI must exactly match the URI registered in your Etsy developer app."
+  });
+});
+
 // Step 1 — redirect user to Etsy for authorization
 app.get("/api/etsy/connect", (req, res) => {
-  if (!ETSY_API_KEY || !ETSY_SECRET || !ETSY_REDIRECT) {
-    return res.status(500).json({ error: "Etsy credentials not configured in Railway environment." });
+  if (!ETSY_API_KEY) {
+    return res.status(500).send('<h2>Missing ETSY_API_KEY</h2><p>Add it to Railway environment variables.</p>');
   }
+  if (!ETSY_REDIRECT) {
+    return res.status(500).send('<h2>Missing ETSY_REDIRECT_URI</h2><p>Set it to: https://YOUR-APP.railway.app/api/etsy/callback</p>');
+  }
+
   const state        = base64url(crypto.randomBytes(16));
   const codeVerifier = generateCodeVerifier();
   const challenge    = generateCodeChallenge(codeVerifier);
   etsyStore.state        = state;
   etsyStore.codeVerifier = codeVerifier;
 
-  const scopes = [
-    "transactions_r", "transactions_w",
-    "listings_r",     "listings_w",
-    "listings_d",
-    "shops_r",        "shops_rw",
-    "profile_r",
-  ].join("%20");
+  // Use URLSearchParams so Node handles encoding correctly
+  const params = new URLSearchParams({
+    response_type:         "code",
+    redirect_uri:          ETSY_REDIRECT,
+    scope:                 "listings_r listings_w listings_d shops_r shops_rw transactions_r transactions_w profile_r",
+    client_id:             ETSY_API_KEY,
+    state:                 state,
+    code_challenge:        challenge,
+    code_challenge_method: "S256",
+  });
 
-  const url = [
-    "https://www.etsy.com/oauth/connect",
-    `?response_type=code`,
-    `&redirect_uri=${encodeURIComponent(ETSY_REDIRECT)}`,
-    `&scope=${scopes}`,
-    `&client_id=${ETSY_API_KEY}`,
-    `&state=${state}`,
-    `&code_challenge=${challenge}`,
-    `&code_challenge_method=S256`,
-  ].join("");
-
+  const url = `https://www.etsy.com/oauth/connect?${params.toString()}`;
+  console.log(`[Etsy OAuth] Redirecting → redirect_uri=${ETSY_REDIRECT}`);
   res.redirect(url);
 });
 
 // Step 2 — Etsy redirects back here with ?code=...&state=...
 app.get("/api/etsy/callback", async (req, res) => {
-  const { code, state } = req.query;
+  const { code, state, error, error_description } = req.query;
 
-  if (!state || state !== etsyStore.state) {
-    return res.status(400).send("Invalid OAuth state. Please try connecting again.");
+  // Etsy sent back an error (user denied, misconfigured app, etc.)
+  if (error) {
+    console.error('[Etsy OAuth] Error from Etsy:', error, error_description);
+    return res.status(400).send(
+      `<h2>Etsy Authorization Failed</h2>
+       <p><strong>${error}</strong>: ${error_description || 'Unknown error'}</p>
+       <p><a href=/api/etsy/connect>Try connecting again</a></p>`
+    );
   }
+
+  // No code — almost always a redirect_uri mismatch
   if (!code) {
-    return res.status(400).send("No authorization code received from Etsy.");
+    console.error('[Etsy OAuth] Callback reached without code. Query params:', JSON.stringify(req.query));
+    return res.status(400).send(
+      `<h2>Missing Authorization Code</h2>
+       <p>The callback was reached without a <code>code</code> from Etsy.</p>
+       <p><strong>Most likely cause:</strong> the Redirect URI registered in your
+       <a href=https://www.etsy.com/developers/your-apps target=_blank>Etsy developer app</a>
+       does not exactly match <code>ETSY_REDIRECT_URI</code> in Railway.</p>
+       <p>Railway ETSY_REDIRECT_URI is currently set to:<br>
+       <code>${ETSY_REDIRECT}</code></p>
+       <p>Make sure that exact URL (including https, no trailing slash) is in your Etsy app's
+       allowed redirect URIs.</p>
+       <p><a href=/api/etsy/connect>Start connection again</a> &nbsp;|&nbsp;
+       <a href=/api/etsy/debug>View debug info</a></p>`
+    );
+  }
+
+  // State mismatch — server likely restarted between connect and callback
+  if (!state || state !== etsyStore.state) {
+    console.error('[Etsy OAuth] State mismatch. Received:', state, '| Stored:', etsyStore.state);
+    return res.status(400).send(
+      `<h2>OAuth State Mismatch</h2>
+       <p>The state token did not match. The server may have restarted during the OAuth flow.</p>
+       <p><a href=/api/etsy/connect>Start connection again</a></p>`
+    );
   }
 
   try {
