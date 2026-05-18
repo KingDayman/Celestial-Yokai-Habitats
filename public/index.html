@@ -29,8 +29,9 @@ body::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opa
   background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:180px}
 
 /* GATE */
-#gate{position:fixed;inset:0;z-index:9999;background:radial-gradient(ellipse at 50% 40%,#100528 0%,#030108 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2rem;text-align:center;padding:2rem;transition:opacity 1.2s,visibility 1.2s}
-#gate.out{opacity:0;visibility:hidden;pointer-events:none}
+#gate{position:fixed;inset:0;z-index:9999;background:radial-gradient(ellipse at 50% 40%,#100528 0%,#030108 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2rem;text-align:center;padding:2rem;transition:opacity 0.5s ease;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#gate.out{opacity:0;pointer-events:none}
+#gate.gone{display:none!important}
 .gate-runes{font-size:1.1rem;letter-spacing:.5em;opacity:.22;animation:rd 6s ease-in-out infinite}
 @keyframes rd{0%,100%{letter-spacing:.5em;opacity:.22}50%{letter-spacing:.7em;opacity:.42}}
 .gate-icon{font-size:4rem;filter:drop-shadow(0 0 28px rgba(232,201,122,.75));animation:gi 4s ease-in-out infinite}
@@ -47,8 +48,8 @@ body::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opa
 #bg-canvas{z-index:0}#fx-canvas{z-index:2}
 
 /* APP */
-#app{position:relative;z-index:10;max-width:780px;margin:0 auto;padding:0 1rem 4rem;opacity:0;transition:opacity 1s}
-#app.show{opacity:1}
+#app{position:relative;z-index:10;max-width:780px;margin:0 auto;padding:0 1rem 4rem;display:none}
+#app.show{display:block}
 
 /* HEADER */
 .hdr{text-align:center;padding:2rem 1rem 1.8rem;border-bottom:1px solid var(--bordergold);margin-bottom:2rem;position:relative}
@@ -308,13 +309,13 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
 </head>
 <body>
 
-<div id="gate">
+<div id="gate" onclick="gateAreaClick(event)">
   <div class="gate-runes">⛩ ✦ 狐 ✦ 商 ✦ ⛩</div>
   <div class="gate-icon">🏮</div>
   <h1 class="gate-title">Kitsari Commerce Console<br><span style="font-size:.62em;opacity:.65">Lantern District Market</span></h1>
   <p class="gate-sub">v2 // ETSY + PRINTIFY + CLAUDE // LANTERN DISTRICT</p>
   <p class="gate-warn">✦ ENTERING ACTIVE COMMERCE HABITAT ✦</p>
-  <button class="gate-btn" onclick="enterRealm()">⟩ OPEN THE MARKET</button>
+  <button class="gate-btn" id="gate-btn" onclick="enterRealm()" ontouchstart="enterRealm()" style="touch-action:manipulation;min-width:200px;min-height:48px;cursor:pointer">⟩ OPEN THE MARKET</button>
   <div class="gate-runes" style="font-size:.82rem;margin-top:.3rem">鬼 龍 影 精 星 商 法</div>
 </div>
 
@@ -811,9 +812,28 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
 ════════════════════════════════════════════════════════ */
 
 /* ── GATE ──────────────────────────────────────────────── */
+var _marketEntered=false;
+function gateAreaClick(e){
+  // Fallback: tap anywhere in lower half of gate = enter
+  if(e.target.id==='gate'&&e.clientY>window.innerHeight*.4)enterRealm();
+}
 function enterRealm(){
-  document.getElementById('gate').classList.add('out');
-  setTimeout(()=>{document.getElementById('app').classList.add('show');boot();},600);
+  if(_marketEntered)return;
+  _marketEntered=true;
+  console.log('Market opened');
+  var gate=document.getElementById('gate');
+  var appEl=document.getElementById('app');
+  // Show app immediately — no transition delay
+  appEl.classList.add('show');
+  // Fade gate out
+  gate.classList.add('out');
+  setTimeout(function(){gate.classList.add('gone');},550);
+  // Boot after next paint so app is visible first
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      boot();
+    });
+  });
 }
 function boot(){initBg();initFx();initHabitat();initClock();checkAllConnections();handleOAuthReturn();}
 
