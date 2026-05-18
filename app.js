@@ -240,29 +240,134 @@ app.get("/api/printify/shops", async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Catalog: returns blueprint IDs for the product types we support
-// Uses real Printify catalog — filtered to sticker-first, then apparel/poster
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/printify/catalog
+// Fetches the REAL Printify blueprint catalog and searches for valid blueprints
+// matching our 3 supported product types: sticker, poster, shirt.
+// Returns real blueprint IDs — no hardcoded fallbacks.
+// ─────────────────────────────────────────────────────────────────────────────
 app.get("/api/printify/catalog", async (req, res) => {
+  if (!PRINTIFY_KEY) return res.status(400).json({ error: "PRINTIFY_API_KEY not configured." });
+
   try {
-    // Fetch first page of blueprints
-    const data = await printifyFetch("/catalog/blueprints.json");
-    // Return full list so frontend can inspect; we also return our curated map
-    const CURATED = {
-      sticker:  { searchTerms: ["sticker"], fallbackId: 358,  note: "Kiss-cut sticker sheet" },
-      poster:   { searchTerms: ["poster", "print"],  fallbackId: 6,    note: "Fine art print / poster" },
-      shirt:    { searchTerms: ["t-shirt", "unisex tee"], fallbackId: 12,  note: "Unisex softstyle T-shirt" },
-      hoodie:   { searchTerms: ["hoodie", "pullover"], fallbackId: 77,  note: "Unisex heavy blend hoodie" },
-      mug:      { searchTerms: ["mug", "ceramic"],   fallbackId: 19,  note: "White ceramic mug 11oz" },
-    };
-    // Try to find real IDs from the catalog
-    const blueprints = Array.isArray(data) ? data : (data.blueprints || data.data || []);
-    for (const [type, cfg] of Object.entries(CURATED)) {
-      const found = blueprints.find(b => cfg.searchTerms.some(t => b.title?.toLowerCase().includes(t)));
-      if (found) cfg.blueprintId = found.id;
-      else cfg.blueprintId = cfg.fallbackId;
+    console.log("[Printify] Fetching catalog blueprints...");
+    const raw = await printifyFetch("/catalog/blueprints.json");
+
+    // Printify returns a plain array
+    const blueprints = Array.isArray(raw) ? raw : [];
+    console.log(`[Printify] Catalog returned ${blueprints.length} blueprints`);
+
+    if (!blueprints.length) {
+      return res.status(500).json({ error: "Printify catalog returned no blueprints. Check API key permissions." });
     }
-    res.json({ curated: CURATED, blueprintCount: blueprints.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+
+    // Search terms for the 3 supported types — ordered by preference
+    const SEARCH = {
+      sticker: ["kiss-cut sticker", "sticker sheet", "sticker"],
+      poster:  ["fine art print", "poster", "art print", "print"],
+      shirt:   ["unisex softstyle", "unisex t-shirt", "t-shirt", "tee"],
+    };
+
+    const results = {};
+
+    for (const [type, terms] of Object.entries(SEARCH)) {
+      let match = null;
+      for (const term of terms) {
+        match = blueprints.find(b => b.title?.toLowerCase().includes(term.toLowerCase()));
+        if (match) break;
+      }
+
+      if (match) {
+        console.log(`[Printify] Found blueprint for '${type}': id=${match.id} title="${match.title}"`);
+        results[type] = {
+          blueprintId:   match.id,
+          blueprintTitle: match.title,
+          found:          true,
+        };
+      } else {
+        console.warn(`[Printify] No blueprint found for '${type}'. Available titles (first 20): ${blueprints.slice(0, 20).map(b => b.title).join(", ")}`);
+        results[type] = {
+          blueprintId:   null,
+          blueprintTitle: null,
+          found:          false,
+          searchedTerms:  terms,
+        };
+      }
+    }
+
+    // Also return a sample of all blueprints so the frontend can display them
+    const sample = blueprints.slice(0, 50).map(b => ({ id: b.id, title: b.title }));
+
+    res.json({
+      supported: results,
+      totalBlueprints: blueprints.length,
+      sampleBlueprints: sample,
+    });
+
+  } catch (err) {
+    console.error("[Printify] catalog error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/printify/blueprint-info?blueprintId=X
+// Fetches real print providers and the first available variant for a blueprint.
+// Called by the frontend BEFORE create-product to confirm valid IDs exist.
+// ─────────────────────────────────────────────────────────────────────────────
+app.get("/api/printify/blueprint-info", async (req, res) => {
+  const blueprintId = parseInt(req.query.blueprintId);
+  if (!blueprintId) return res.status(400).json({ error: "blueprintId query param required" });
+
+  console.log(`[Printify] Fetching blueprint info for id=${blueprintId}`);
+
+  try {
+    // Step 1: get print providers
+    const providersRaw = await printifyFetch(`/catalog/blueprints/${blueprintId}/print_providers.json`);
+    const providers = Array.isArray(providersRaw) ? providersRaw : [];
+
+    console.log(`[Printify] Blueprint ${blueprintId} has ${providers.length} print provider(s)`);
+
+    if (!providers.length) {
+      return res.status(404).json({ error: `No print providers found for blueprint ${blueprintId}. Blueprint may be invalid or unavailable.` });
+    }
+
+    // Use the first provider
+    const provider = providers[0];
+    console.log(`[Printify] Using provider id=${provider.id} title="${provider.title}"`);
+
+    // Step 2: get variants for this provider
+    const variantsRaw = await printifyFetch(`/catalog/blueprints/${blueprintId}/print_providers/${provider.id}/variants.json`);
+    const variants = variantsRaw?.variants || variantsRaw || [];
+    const variantList = Array.isArray(variants) ? variants : [];
+
+    console.log(`[Printify] Provider ${provider.id} has ${variantList.length} variant(s)`);
+
+    if (!variantList.length) {
+      return res.status(404).json({ error: `No variants found for blueprint ${blueprintId} / provider ${provider.id}.` });
+    }
+
+    const firstVariant = variantList[0];
+    console.log(`[Printify] First variant id=${firstVariant.id} title="${firstVariant.title || "untitled"}"`);
+
+    res.json({
+      blueprintId,
+      provider: {
+        id:    provider.id,
+        title: provider.title,
+      },
+      variant: {
+        id:    firstVariant.id,
+        title: firstVariant.title || "Default variant",
+      },
+      allProviders: providers.map(p => ({ id: p.id, title: p.title })),
+      variantCount: variantList.length,
+    });
+
+  } catch (err) {
+    console.error(`[Printify] blueprint-info error for ${blueprintId}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/printify/products", async (req, res) => {
@@ -272,98 +377,93 @@ app.get("/api/printify/products", async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET blueprint print providers + variants ──────────────────────────────────
-async function getBlueprintProviders(blueprintId) {
-  const data = await printifyFetch(`/catalog/blueprints/${blueprintId}/print_providers.json`);
-  return Array.isArray(data) ? data : [];
-}
-async function getFirstVariant(blueprintId, providerId) {
-  const data = await printifyFetch(`/catalog/blueprints/${blueprintId}/print_providers/${providerId}/variants.json`);
-  const variants = data?.variants || [];
-  if (!variants.length) throw new Error(`No variants for blueprint ${blueprintId} / provider ${providerId}`);
-  return variants[0].id;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/printify/create-product
-// Creates a real Printify draft product (not published to Etsy yet).
-// Uses a placeholder image URL — you upload art separately via Printify dashboard
-// or pass imageUrl in request body.
+// Requires explicit blueprintId + printProviderId + variantId from the frontend.
+// No fallbacks. No hardcoded IDs. Caller must obtain valid IDs via
+// /api/printify/catalog then /api/printify/blueprint-info first.
 // ─────────────────────────────────────────────────────────────────────────────
 app.post("/api/printify/create-product", async (req, res) => {
-  const { title, description, blueprintId, imageUrl, price, tags } = req.body;
-  if (!title) return res.status(400).json({ error: "title required" });
+  const { title, description, blueprintId, printProviderId, variantId, imageUrl, price } = req.body;
+
+  // Validate all required IDs
+  if (!title)           return res.status(400).json({ error: "title is required" });
+  if (!blueprintId)     return res.status(400).json({ error: "blueprintId is required — fetch /api/printify/catalog first" });
+  if (!printProviderId) return res.status(400).json({ error: "printProviderId is required — fetch /api/printify/blueprint-info first" });
+  if (!variantId)       return res.status(400).json({ error: "variantId is required — fetch /api/printify/blueprint-info first" });
+
+  const bpId  = parseInt(blueprintId);
+  const prvId = parseInt(printProviderId);
+  const varId = parseInt(variantId);
+
+  console.log(`[Printify] create-product — blueprint=${bpId} provider=${prvId} variant=${varId} title="${title}"`);
 
   try {
     const shopId = await getPrintifyShopId();
+    console.log(`[Printify] Using shop id=${shopId}`);
 
-    // Resolve blueprint — default to sticker (358) if not provided
-    const bpId = parseInt(blueprintId) || 358;
-
-    // Get first available print provider for this blueprint
-    const providers = await getBlueprintProviders(bpId);
-    if (!providers.length) return res.status(400).json({ error: `No print providers for blueprint ${bpId}` });
-    const providerId = providers[0].id;
-
-    // Get first variant
-    const variantId = await getFirstVariant(bpId, providerId);
-
-    // Use provided image or a canonical Printify placeholder
-    const placeholderImage = "https://images.printify.com/mockup/5d15ca551902bb3132521c36/25867/6012/unisex-staple-t-shirt-black-heather-front.jpg";
-    const artUrl = imageUrl || placeholderImage;
-
-    // Upload image to Printify (if it's not already a Printify URL)
-    let printifyImageId;
-    try {
-      const imgPayload = { file_name: `kitsari_${Date.now()}.png`, url: artUrl };
-      const imgRes = await printifyFetch("/uploads/images.json", {
-        method: "POST",
-        body: JSON.stringify(imgPayload),
-      });
-      printifyImageId = imgRes.id;
-    } catch (imgErr) {
-      console.warn("Image upload failed, using placeholder:", imgErr.message);
-      printifyImageId = null;
+    // Optionally upload provided image URL to Printify
+    let printifyImageId = null;
+    if (imageUrl) {
+      console.log(`[Printify] Uploading image: ${imageUrl}`);
+      try {
+        const imgRes = await printifyFetch("/uploads/images.json", {
+          method: "POST",
+          body: JSON.stringify({ file_name: `kitsari_${Date.now()}.png`, url: imageUrl }),
+        });
+        printifyImageId = imgRes.id;
+        console.log(`[Printify] Image uploaded, id=${printifyImageId}`);
+      } catch (imgErr) {
+        console.warn(`[Printify] Image upload failed (continuing without image): ${imgErr.message}`);
+      }
     }
 
-    // Build print areas — use uploaded image or leave blank for manual art upload
-    const printAreas = printifyImageId
-      ? [{
-          variant_ids: [variantId],
-          placeholders: [{ position: "front", images: [{ id: printifyImageId, x: 0.5, y: 0.5, scale: 1, angle: 0 }] }],
-        }]
-      : [{
-          variant_ids: [variantId],
-          placeholders: [{ position: "front", images: [] }],
-        }];
+    // Build print areas
+    const printAreas = [{
+      variant_ids: [varId],
+      placeholders: [{
+        position: "front",
+        images: printifyImageId
+          ? [{ id: printifyImageId, x: 0.5, y: 0.5, scale: 1, angle: 0 }]
+          : [],
+      }],
+    }];
 
-    const productPayload = {
-      title: title.slice(0, 140),
-      description: description || title,
-      blueprint_id: bpId,
-      print_provider_id: providerId,
-      variants: [{ id: variantId, price: Math.round((parseFloat(price) || 18.00) * 100), is_enabled: true }],
-      print_areas: printAreas,
+    const payload = {
+      title:             title.slice(0, 140),
+      description:       description || title,
+      blueprint_id:      bpId,
+      print_provider_id: prvId,
+      variants:          [{ id: varId, price: Math.round((parseFloat(price) || 18.00) * 100), is_enabled: true }],
+      print_areas:       printAreas,
     };
+
+    console.log(`[Printify] Submitting product payload:`, JSON.stringify({ ...payload, description: "[truncated]" }));
 
     const product = await printifyFetch(`/shops/${shopId}/products.json`, {
       method: "POST",
-      body: JSON.stringify(productPayload),
+      body:   JSON.stringify(payload),
     });
 
+    console.log(`[Printify] Product created successfully: id=${product.id}`);
+
     res.json({
-      success: true,
+      success:           true,
       printifyProductId: product.id,
-      title: product.title,
-      blueprintId: bpId,
-      providerId,
-      variantId,
+      title:             product.title,
+      blueprintId:       bpId,
+      printProviderId:   prvId,
+      variantId:         varId,
       shopId,
-      note: printifyImageId ? "Product created with uploaded art." : "Product created — upload art via Printify dashboard.",
+      hasImage:          !!printifyImageId,
+      note:              printifyImageId
+        ? "Product created with uploaded art."
+        : "Product created — upload art via Printify dashboard before publishing.",
     });
+
   } catch (err) {
-    console.error("create-product error:", err);
-    res.status(500).json({ error: err.message });
+    console.error(`[Printify] create-product failed: ${err.message}`);
+    res.status(500).json({ error: err.message, debug: { blueprintId: bpId, printProviderId: prvId, variantId: varId } });
   }
 });
 
