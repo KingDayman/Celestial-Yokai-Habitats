@@ -1,24 +1,56 @@
 const express = require("express");
 const Anthropic = require("@anthropic-ai/sdk");
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-const PRINTIFY_KEY = process.env.PRINTIFY_API_KEY || null;
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// ── Credentials (never exposed to frontend) ──────────────────────────────────
+const ANTHROPIC_KEY  = process.env.ANTHROPIC_API_KEY;
+const PRINTIFY_KEY   = process.env.PRINTIFY_API_KEY   || null;
+const ETSY_API_KEY   = process.env.ETSY_API_KEY        || null;
+const ETSY_SECRET    = process.env.ETSY_SHARED_SECRET  || null;
+const ETSY_REDIRECT  = process.env.ETSY_REDIRECT_URI   || null;
+
+const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
+
+// ── In-memory token store (persists per process; upgrade to DB when needed) ───
+const etsyStore = {
+  accessToken:  null,
+  refreshToken: null,
+  shopId:       null,
+  shopName:     null,
+  connectedAt:  null,
+  state:        null,   // PKCE state param
+  codeVerifier: null,   // PKCE verifier
+};
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
-const KITSARI_SYSTEM = `You are Kitsari — a Celestial Yokai of the Lantern District. You are a nine-tailed fox spirit who runs the most powerful mystical night market in the celestial realm. You have mastered commerce, brand alchemy, social transmission, and digital strategy.
+// ── PKCE helpers ──────────────────────────────────────────────────────────────
+function base64url(buf) {
+  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+function generateCodeVerifier() { return base64url(crypto.randomBytes(32)); }
+function generateCodeChallenge(v) {
+  return base64url(crypto.createHash("sha256").update(v).digest());
+}
 
-PERSONALITY: Sharp, warm, playful, confident. You speak with lantern-fire precision — never generic, always alive. Occasional mystical metaphors welcome, but always stay actionable and useful. No em dashes.
+// ── Kitsari Claude helper ─────────────────────────────────────────────────────
+const KITSARI_SYSTEM = `You are Kitsari — operator of the Lantern District Market, the most powerful celestial night market in existence. You are a nine-tailed fox spirit who has mastered Etsy commerce, Printify print-on-demand, NFT utility design, social media strategy, and brand alchemy.
 
-RESPONSE FORMAT: Use markdown formatting. Bold key phrases. Use numbered lists for sequences, bullet lists for options. End every response with a line: ✦ Kitsari — Lantern District`;
+PERSONALITY: Sharp, warm, precise, playful. You speak with lantern-fire confidence. Never generic. No em dashes. Keep responses actionable.
 
-async function askKitsari(prompt, maxTokens = 1500) {
+COMPLIANCE: Never copy existing sellers, copyrighted designs, or trademarks. All products must be original Celestial Yokai-themed work connected to the NFT ecosystem.
+
+NFT UTILITY: When relevant, weave in NFT holder benefits: holder-only discounts, trait-based merch, early access drops, secret shop pages, collectible lore artifacts, physical world extensions.
+
+FORMAT: Use markdown. Bold key phrases. Numbered lists for sequences, bullet lists for options. End every response with: ✦ Kitsari — Lantern District`;
+
+async function askKitsari(prompt, maxTokens = 1600) {
   const msg = await anthropic.messages.create({
     model: "claude-opus-4-5",
     max_tokens: maxTokens,
@@ -28,6 +60,269 @@ async function askKitsari(prompt, maxTokens = 1500) {
   return msg.content.filter(b => b.type === "text").map(b => b.text).join("\n");
 }
 
+// ── Etsy API helper ───────────────────────────────────────────────────────────
+async function etsyFetch(endpoint, opts = {}) {
+  if (!etsyStore.accessToken) throw new Error("Etsy not connected");
+  const base = "https://openapi.etsy.com/v3";
+  const r = await fetch(`${base}${endpoint}`, {
+    ...opts,
+    headers: {
+      "x-api-key": ETSY_API_KEY,
+      Authorization: `Bearer ${etsyStore.accessToken}`,
+      "Content-Type": "application/json",
+      ...(opts.headers || {}),
+    },
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Etsy API ${r.status}: ${txt}`);
+  }
+  return r.json();
+}
+
+// ── Printify API helper ───────────────────────────────────────────────────────
+async function printifyFetch(endpoint, opts = {}) {
+  if (!PRINTIFY_KEY) throw new Error("Printify not configured");
+  const r = await fetch(`https://api.printify.com/v1${endpoint}`, {
+    ...opts,
+    headers: {
+      Authorization: `Bearer ${PRINTIFY_KEY}`,
+      "Content-Type": "application/json",
+      ...(opts.headers || {}),
+    },
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Printify API ${r.status}: ${txt}`);
+  }
+  return r.json();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ETSY OAUTH ROUTES
+// ════════════════════════════════════════════════════════════════════════════
+
+// Step 1 — redirect user to Etsy for authorization
+app.get("/api/etsy/connect", (req, res) => {
+  if (!ETSY_API_KEY || !ETSY_SECRET || !ETSY_REDIRECT) {
+    return res.status(500).json({ error: "Etsy credentials not configured in Railway environment." });
+  }
+  const state        = base64url(crypto.randomBytes(16));
+  const codeVerifier = generateCodeVerifier();
+  const challenge    = generateCodeChallenge(codeVerifier);
+  etsyStore.state        = state;
+  etsyStore.codeVerifier = codeVerifier;
+
+  const scopes = [
+    "transactions_r", "transactions_w",
+    "listings_r",     "listings_w",
+    "listings_d",
+    "shops_r",        "shops_rw",
+    "profile_r",
+  ].join("%20");
+
+  const url = [
+    "https://www.etsy.com/oauth/connect",
+    `?response_type=code`,
+    `&redirect_uri=${encodeURIComponent(ETSY_REDIRECT)}`,
+    `&scope=${scopes}`,
+    `&client_id=${ETSY_API_KEY}`,
+    `&state=${state}`,
+    `&code_challenge=${challenge}`,
+    `&code_challenge_method=S256`,
+  ].join("");
+
+  res.redirect(url);
+});
+
+// Step 2 — Etsy redirects back here with ?code=...&state=...
+app.get("/api/etsy/callback", async (req, res) => {
+  const { code, state } = req.query;
+
+  if (!state || state !== etsyStore.state) {
+    return res.status(400).send("Invalid OAuth state. Please try connecting again.");
+  }
+  if (!code) {
+    return res.status(400).send("No authorization code received from Etsy.");
+  }
+
+  try {
+    const tokenRes = await fetch("https://api.etsy.com/v3/public/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type:    "authorization_code",
+        client_id:     ETSY_API_KEY,
+        redirect_uri:  ETSY_REDIRECT,
+        code,
+        code_verifier: etsyStore.codeVerifier,
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const err = await tokenRes.text();
+      console.error("Etsy token exchange failed:", err);
+      return res.status(500).send("Token exchange failed. Check Railway logs.");
+    }
+
+    const tokens = await tokenRes.json();
+    etsyStore.accessToken  = tokens.access_token;
+    etsyStore.refreshToken = tokens.refresh_token;
+    etsyStore.connectedAt  = new Date().toISOString();
+    etsyStore.state        = null;
+    etsyStore.codeVerifier = null;
+
+    // Fetch shop info immediately
+    try {
+      const me = await etsyFetch("/application/openapi-ping");
+      const shopData = await etsyFetch("/application/shops?limit=1");
+      if (shopData?.results?.[0]) {
+        etsyStore.shopId   = shopData.results[0].shop_id;
+        etsyStore.shopName = shopData.results[0].shop_name;
+      }
+    } catch (e) {
+      console.warn("Could not fetch shop info after auth:", e.message);
+    }
+
+    // Redirect back to the app with success flag
+    res.redirect("/?etsy=connected");
+  } catch (err) {
+    console.error("Etsy OAuth callback error:", err);
+    res.status(500).send("OAuth flow failed. See logs.");
+  }
+});
+
+// Etsy status
+app.get("/api/etsy/status", (req, res) => {
+  if (!ETSY_API_KEY) {
+    return res.json({ connected: false, status: "unconfigured", message: "Etsy credentials not set in Railway." });
+  }
+  if (!etsyStore.accessToken) {
+    return res.json({ connected: false, status: "disconnected", message: "Etsy not connected yet." });
+  }
+  res.json({
+    connected:   true,
+    status:      "connected",
+    shopId:      etsyStore.shopId,
+    shopName:    etsyStore.shopName,
+    connectedAt: etsyStore.connectedAt,
+  });
+});
+
+// Etsy shop info
+app.get("/api/etsy/shop", async (req, res) => {
+  if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
+  try {
+    if (!etsyStore.shopId) {
+      const data = await etsyFetch("/application/shops?limit=1");
+      if (data?.results?.[0]) {
+        etsyStore.shopId   = data.results[0].shop_id;
+        etsyStore.shopName = data.results[0].shop_name;
+      }
+    }
+    const shop = await etsyFetch(`/application/shops/${etsyStore.shopId}`);
+    res.json(shop);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Etsy listings
+app.get("/api/etsy/listings", async (req, res) => {
+  if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
+  try {
+    const state  = req.query.state || "active";
+    const limit  = Math.min(parseInt(req.query.limit) || 25, 100);
+    const data   = await etsyFetch(
+      `/application/shops/${etsyStore.shopId}/listings?state=${state}&limit=${limit}&includes=Images,MainImage`
+    );
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create draft Etsy listing (does NOT publish)
+app.post("/api/etsy/create-draft", async (req, res) => {
+  if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
+  const { title, description, tags, price, quantity, type } = req.body;
+  if (!title || !description) return res.status(400).json({ error: "Title and description required." });
+
+  // Publishing guard — always locked
+  const PUBLISH_LOCKED_MSG = "Autonomous publishing is locked until draft quality, Etsy compliance, and Printify sync are verified.";
+
+  try {
+    const payload = {
+      quantity:           quantity || 999,
+      title:              title.slice(0, 140),
+      description,
+      price:              parseFloat(price) || 18.00,
+      who_made:           "i_did",
+      when_made:          "made_to_order",
+      taxonomy_id:        2078,                        // Art & Collectibles > Digital
+      type:               type || "download",
+      shipping_profile_id: null,
+      is_supply:          false,
+      tags:               (tags || []).slice(0, 13),
+      state:              "draft",                     // ALWAYS draft
+    };
+
+    const listing = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`, {
+      method:  "POST",
+      body:    JSON.stringify(payload),
+    });
+
+    res.json({
+      success:       true,
+      listingId:     listing.listing_id,
+      url:           listing.url,
+      state:         "draft",
+      publishLocked: PUBLISH_LOCKED_MSG,
+    });
+  } catch (err) {
+    console.error("Draft listing error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// PRINTIFY ROUTES
+// ════════════════════════════════════════════════════════════════════════════
+
+app.get("/api/printify/status", async (req, res) => {
+  if (!PRINTIFY_KEY) return res.json({ connected: false, message: "PRINTIFY_API_KEY not set." });
+  try {
+    const shops = await printifyFetch("/shops.json");
+    res.json({ connected: true, shopCount: shops.length, shops: shops.map(s => ({ id: s.id, title: s.title })) });
+  } catch (err) {
+    res.json({ connected: false, message: err.message });
+  }
+});
+
+app.get("/api/printify/shops", async (req, res) => {
+  try {
+    const data = await printifyFetch("/shops.json");
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/printify/products", async (req, res) => {
+  try {
+    const shopId = req.query.shopId;
+    if (!shopId) return res.status(400).json({ error: "shopId required" });
+    const data = await printifyFetch(`/shops/${shopId}/products.json?limit=20&page=1`);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// KITSARI AI ROUTES
+// ════════════════════════════════════════════════════════════════════════════
+
 // General channel
 app.post("/api/agent/kitsari", async (req, res) => {
   const { command } = req.body;
@@ -36,189 +331,241 @@ app.post("/api/agent/kitsari", async (req, res) => {
     const response = await askKitsari(command.trim());
     res.json({ agent: "kitsari", response });
   } catch (err) {
-    console.error(err);
     res.status(err.status === 401 ? 401 : 500).json({ error: "Transmission failed." });
   }
 });
 
-// Product idea generator
+// Product idea
 app.post("/api/commerce/product-idea", async (req, res) => {
   const { niche, style, medium } = req.body;
-  const prompt = `Generate 3 original print-on-demand product ideas for the Celestial Night Market.
+  const prompt = `Generate 3 original Celestial Yokai print-on-demand product ideas.
 
-Niche/theme: ${niche || "celestial yokai, mystical anime, dark cosmic"}
-Visual style: ${style || "glowing, ethereal, dark palette"}
-Medium preference: ${medium || "any"}
+Theme: ${niche || "celestial yokai, mystical anime, dark cosmic"}
+Visual style: ${style || "glowing, ethereal, dark palette with gold accents"}
+Product type preference: ${medium || "open"}
 
-For each idea provide:
-1. **Product Name** — compelling, marketable title
-2. **Product Type** — (art print / t-shirt / hoodie / sticker sheet / tote / mug / enamel pin)
-3. **Design Concept** — vivid description of the artwork (2-3 sentences)
-4. **Target Buyer** — who buys this and why
-5. **Price Point** — suggested retail with reasoning
-6. **Printify Blueprint** — most likely Printify product category
+For EACH of the 3 ideas provide:
+1. **Product Name** — evocative, marketable
+2. **Product Type** — specific Printify-compatible category
+3. **Design Concept** — vivid 2-3 sentence visual description. Must be original.
+4. **Target Buyer** — who buys it and why
+5. **Retail Price** — with margin reasoning
+6. **Printify Blueprint Match** — most relevant Printify category
+7. **NFT Holder Utility** — how NFT holders get special access or trait-based variants
 
-Format as 3 distinct product cards separated by ---`;
+Separate ideas with ---
+All designs must be original Celestial Yokai IP. No copying existing sellers.`;
 
   try {
-    const response = await askKitsari(prompt, 1800);
-    res.json({ response });
+    res.json({ response: await askKitsari(prompt, 1800) });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "The market spirits are unavailable. Try again." });
+    res.status(500).json({ error: "Market spirits unavailable." });
   }
 });
 
-// Etsy listing drafter
-app.post("/api/commerce/etsy-listing", async (req, res) => {
-  const { productName, productType, description, targetBuyer } = req.body;
-  if (!productName) return res.status(400).json({ error: "Product name required." });
+// Full draft listing workflow (AI generation — does NOT push to Etsy yet)
+app.post("/api/commerce/draft-listing", async (req, res) => {
+  const { concept, productType, targetBuyer, nftAngle } = req.body;
+  if (!concept) return res.status(400).json({ error: "Concept required." });
 
-  const prompt = `Create a complete Etsy listing draft.
+  const prompt = `Create a complete Etsy listing draft for the Lantern District Market.
 
-Product: ${productName}
-Type: ${productType || "print-on-demand art print"}
-Design notes: ${description || "celestial yokai aesthetic, dark and mystical"}
-Target buyer: ${targetBuyer || "anime fans, mystical art collectors"}
+CONCEPT: ${concept}
+PRODUCT TYPE: ${productType || "art print"}
+TARGET BUYER: ${targetBuyer || "anime fans, mystical art collectors, NFT collectors"}
+NFT ANGLE: ${nftAngle || "include holder-only utility where relevant"}
 
-Generate exactly this structure:
+Generate EXACTLY this structure:
 
-## TITLE
-One SEO-optimized Etsy title, max 140 chars, front-load the most searched keywords.
+## PRODUCT NAME
+A compelling product title (not the Etsy SEO title — the brand name for this piece)
+
+## LORE ANGLE
+2-3 sentences of in-universe lore that makes this product feel like a collectible artifact, not just merch.
+
+## TARGET BUYER
+Who buys this. Be specific about their interests and buying motivation.
+
+## ETSY SEO TITLE
+Max 140 characters. Front-load highest-searched keywords. End with brand identifiers.
 
 ## DESCRIPTION
-Full Etsy listing description, 180-250 words. Opening hook, product details, care/material placeholder, brand voice that matches the mystical aesthetic.
+180-250 words. Opening hook, lore connection, product details, material/size placeholder, care note. Brand voice: mystical but clear.
 
 ## 13 ETSY TAGS
-Tag1, Tag2, Tag3, Tag4, Tag5, Tag6, Tag7, Tag8, Tag9, Tag10, Tag11, Tag12, Tag13
-(each tag max 20 chars, mix broad + niche keywords)
+tag one, tag two, tag three, tag four, tag five, tag six, tag seven, tag eight, tag nine, tag ten, tag eleven, tag twelve, tag thirteen
+(Each tag max 20 chars. Mix broad + niche. No repeats.)
 
 ## PRICING SUGGESTION
-Base cost estimate + suggested retail + profit margin note.
+Recommended retail price with reasoning. Include NFT holder discount suggestion.
+
+## PRINTIFY PRODUCT MATCH
+Best Printify blueprint category for this product.
 
 ## MOCKUP ART DIRECTION
-2-3 sentences on how to style the mockup photo for maximum Etsy appeal.`;
+2-3 sentences on staging the mockup photo for maximum Etsy conversion.
+
+## X LAUNCH POST
+One post, max 280 chars, hook-first, 2-3 hashtags.
+
+## NFT HOLDER UTILITY
+Specific holder benefit for this product: trait variant, discount tier, early access, or secret page.`;
 
   try {
-    const response = await askKitsari(prompt, 2000);
-    res.json({ response, status: "draft", etsyStatus: "pending_approval" });
+    const aiDraft = await askKitsari(prompt, 2200);
+    res.json({ response: aiDraft, status: "ai_draft", publishLocked: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Listing draft failed. Try again." });
+    res.status(500).json({ error: "Draft generation failed." });
   }
 });
 
-// Launch post generator
+// Launch post
 app.post("/api/commerce/launch-post", async (req, res) => {
   const { productName, platform, tone, dropDate } = req.body;
   if (!productName) return res.status(400).json({ error: "Product name required." });
 
-  const prompt = `Write a complete social launch package for a Celestial Night Market product drop.
+  const prompt = `Write a complete launch social package for a Celestial Night Market drop.
 
 Product: ${productName}
 Platform: ${platform || "X (Twitter) and Instagram"}
-Tone: ${tone || "mystical, hype, community-focused"}
-Drop timing: ${dropDate || "now live"}
-
-Generate:
+Tone: ${tone || "mystical, hype, community-first"}
+Timing: ${dropDate || "now live"}
 
 ## X LAUNCH POST
-Punchy main post, max 280 chars. Hook-first. 2-3 hashtags.
+Max 280 chars, hook-first, 2-3 hashtags.
 
 ## X THREAD (3 posts)
-Post 1: The lore/story angle
-Post 2: Product details and value
-Post 3: CTA with urgency
+Post 1 — lore/story angle
+Post 2 — product details and value
+Post 3 — CTA with urgency
 
 ## INSTAGRAM CAPTION
-150-200 words. Visual opener, product story, community call, 15 hashtags at the end.
+150-200 words. Visual opener, product story, community callout, 15 hashtags at end.
 
 ## 5-DAY DROP SEQUENCE
-Day 1 through Day 5 — one content beat per day.`;
+Day 1 through 5 — one content beat each.
+
+## NFT HOLDER EXCLUSIVE POST
+Separate post specifically for NFT holders. Reference holder benefits.`;
 
   try {
-    const response = await askKitsari(prompt, 2000);
-    res.json({ response });
+    res.json({ response: await askKitsari(prompt, 2000) });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Signal lost. Retry the transmission." });
+    res.status(500).json({ error: "Signal lost. Retry." });
   }
 });
 
 // Lore content
 app.post("/api/commerce/lore-content", async (req, res) => {
   const { topic, platform } = req.body;
-  const prompt = `Write lore content for the Celestial Yokai brand universe.
+  const prompt = `Write lore content for the Celestial Yokai universe.
 
-Topic: ${topic || "the Kitsari species and the Lantern District"}
+Topic: ${topic || "Kitsari and the Lantern District Market"}
 Platform: ${platform || "X / Twitter"}
+
+## LORE POST
+A living transmission from the hidden realm. Mysterious, evocative, builds universe depth.
+
+## LORE THREAD
+3 follow-up posts deepening the mythology.
+
+## ENGAGEMENT HOOK
+One line so magnetic it demands sharing or a reply.
+
+## CAMPAIGN ANGLE
+How this lore post connects to a product or drop.`;
+
+  try {
+    res.json({ response: await askKitsari(prompt, 1500) });
+  } catch (err) {
+    res.status(500).json({ error: "Lore keeper unavailable." });
+  }
+});
+
+// Market Signal Scan
+app.post("/api/commerce/market-scan", async (req, res) => {
+  const { category, priceRange } = req.body;
+  const prompt = `Analyze market signals for the Celestial Night Market.
+
+Category: ${category || "mystical anime art prints, celestial yokai merch"}
+Price range: ${priceRange || "$10-$50"}
 
 Generate:
 
-## LORE POST
-World-building content that feels like a living transmission from the hidden realm. Mysterious, evocative, makes people want to know more. Matches platform format.
+## MARKET SIGNAL REPORT
+What is selling in this space right now. Trends, buyer psychology, seasonal patterns.
 
-## LORE THREAD
-3 follow-up posts that deepen the mythology.
+## CONTENT GAP
+What is MISSING that Celestial Yokai could own. Original angles only.
 
-## CAMPAIGN HOOK
-One standalone hook line so magnetic it demands sharing.`;
+## TOP 3 PRODUCT OPPORTUNITIES
+Each with: product type, why it sells, price point, first-mover advantage.
+
+## ETSY SEO KEYWORDS
+15 high-opportunity keywords for this category (not from any specific seller).
+
+## NFT CROSSOVER ANGLE
+How to connect these products to NFT holder utility for maximum differentiation.
+
+IMPORTANT: Analyze trends and buyer behavior only. Do not copy any specific seller's listings, designs, or content.`;
 
   try {
-    const response = await askKitsari(prompt, 1500);
-    res.json({ response });
+    res.json({ response: await askKitsari(prompt, 1800) });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "The lore keeper is unavailable." });
+    res.status(500).json({ error: "Market scan failed." });
   }
 });
 
-// Printify status check
-app.get("/api/printify/status", async (req, res) => {
-  if (!PRINTIFY_KEY) {
-    return res.json({ connected: false, message: "PRINTIFY_API_KEY not set in Railway environment." });
+// ════════════════════════════════════════════════════════════════════════════
+// LEDGER SNAPSHOT — real Etsy data if connected
+// ════════════════════════════════════════════════════════════════════════════
+app.get("/api/ledger/snapshot", async (req, res) => {
+  if (!etsyStore.accessToken || !etsyStore.shopId) {
+    return res.json({
+      connected: false,
+      message:   "Connect Etsy to populate the Lunar Ledger.",
+      mock:      { visits: 0, favorites: 0, orders: 0, revenue: "0.00", conversionRate: "0.0%", draftCount: 0 }
+    });
   }
   try {
-    const r = await fetch("https://api.printify.com/v1/shops.json", {
-      headers: { Authorization: `Bearer ${PRINTIFY_KEY}` },
+    const [shop, listings] = await Promise.allSettled([
+      etsyFetch(`/application/shops/${etsyStore.shopId}`),
+      etsyFetch(`/application/shops/${etsyStore.shopId}/listings?state=draft&limit=100`),
+    ]);
+
+    const shopData     = shop.status      === "fulfilled" ? shop.value      : null;
+    const draftData    = listings.status  === "fulfilled" ? listings.value  : null;
+
+    res.json({
+      connected:    true,
+      shopName:     etsyStore.shopName,
+      shopId:       etsyStore.shopId,
+      connectedAt:  etsyStore.connectedAt,
+      visits:       shopData?.num_favorers ?? "—",
+      favorites:    shopData?.num_favorers ?? "—",
+      orders:       shopData?.transaction_sold_count ?? "—",
+      revenue:      shopData?.currency_code ? `${shopData.currency_code}` : "—",
+      draftCount:   draftData?.count ?? 0,
+      listingCount: shopData?.listing_active_count ?? 0,
     });
-    if (!r.ok) throw new Error("Invalid key");
-    const data = await r.json();
-    res.json({ connected: true, shops: data });
-  } catch {
-    res.json({ connected: false, message: "Printify key present but authentication failed." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Etsy status — pending approval
-app.get("/api/etsy/status", (req, res) => {
-  res.json({
-    connected: false,
-    status: "pending_approval",
-    message: "Awaiting Etsy API approval. Listing drafts are saved locally."
-  });
-});
-
-// Ledger snapshot — placeholder until integrations connect
-app.get("/api/ledger/snapshot", (req, res) => {
-  res.json({
-    status: "placeholder",
-    message: "Connect Etsy to populate live data.",
-    mock: {
-      visits: 0, favorites: 0, orders: 0,
-      revenue: "0.00", conversionRate: "0.0%",
-      bestProduct: "—", socialTraffic: "—",
-      lastUpdated: null
-    }
-  });
-});
-
+// ── Health ────────────────────────────────────────────────────────────────────
 app.get("/health", (req, res) => {
-  res.json({ status: "online", console: "Kitsari Commerce Console v1" });
+  res.json({
+    status:    "online",
+    console:   "Kitsari Commerce Console v2",
+    etsy:      etsyStore.accessToken ? "connected" : "disconnected",
+    printify:  PRINTIFY_KEY ? "configured" : "unconfigured",
+  });
 });
 
 app.listen(PORT, () => {
-  console.log(`\n✦ Kitsari Commerce Console v1 — port ${PORT}`);
-  console.log(`✦ Printify: ${PRINTIFY_KEY ? "KEY FOUND" : "not configured"}`);
-  console.log(`✦ Etsy: pending API approval\n`);
+  console.log(`\n✦ Kitsari Commerce Console v2 — port ${PORT}`);
+  console.log(`✦ Etsy:     ${ETSY_API_KEY ? "credentials set" : "NOT CONFIGURED"}`);
+  console.log(`✦ Printify: ${PRINTIFY_KEY ? "KEY SET" : "not configured"}`);
+  console.log(`✦ Redirect: ${ETSY_REDIRECT || "not set"}\n`);
 });
