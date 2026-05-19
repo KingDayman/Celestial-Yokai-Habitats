@@ -1,355 +1,229 @@
-const express = require("express");
-const Anthropic = require("@anthropic-ai/sdk");
-const path = require("path");
-const crypto = require("crypto");
+// ✦ KITSARI COMMERCE CONSOLE v2 — app.js
+// Route order: json → API routes → static → SPA fallback → listen
+// If you can read this at /api/debug/env, Railway is running THIS file.
 
-const app = express();
+const express   = require("express");
+const Anthropic  = require("@anthropic-ai/sdk");
+const path       = require("path");
+const crypto     = require("crypto");
+
+const app  = express();
 const PORT = process.env.PORT || 8080;
 
-// ── Credentials — never exposed to frontend ───────────────────────────────────
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const PRINTIFY_KEY  = process.env.PRINTIFY_API_KEY   || null;
-const ETSY_API_KEY  = process.env.ETSY_API_KEY        || null;
-const ETSY_SECRET   = process.env.ETSY_SHARED_SECRET  || null;
-const ETSY_REDIRECT = process.env.ETSY_REDIRECT_URI   || null;
+const PRINTIFY_KEY  = process.env.PRINTIFY_API_KEY  || null;
+const ETSY_API_KEY  = process.env.ETSY_API_KEY       || null;
+const ETSY_SECRET   = process.env.ETSY_SHARED_SECRET || null;
+const ETSY_REDIRECT = process.env.ETSY_REDIRECT_URI  || null;
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
 
-// ── In-memory stores ──────────────────────────────────────────────────────────
 const etsyStore = {
   accessToken: null, refreshToken: null,
   shopId: null, shopName: null, connectedAt: null,
   state: null, codeVerifier: null,
 };
-const printifyStore = {
-  shopId: null, shopTitle: null,
-  catalog: null, catalogFetchedAt: null,
-};
+const printifyStore = { shopId: null, shopTitle: null, catalog: null, catalogFetchedAt: null };
 const CATALOG_TTL_MS = 30 * 60 * 1000;
 
+// ── 1. JSON body parser ───────────────────────────────────────────────────────
 app.use(express.json({ limit: "20mb" }));
-// Static files served AFTER all API routes — see bottom of file
-const INDEX_HTML = path.join(__dirname, "public", "index.html");
 
-// ════════════════════════════════════════════════════════════════════════════
-// DEBUG ROUTES — safe to call in browser, never expose secrets
-// ════════════════════════════════════════════════════════════════════════════
-app.get("/api/debug/env", (req, res) => {
-  res.json({
-    hasAnthropicKey:    !!process.env.ANTHROPIC_API_KEY,
-    hasPrintifyKey:     !!process.env.PRINTIFY_API_KEY,
-    hasEtsyApiKey:      !!process.env.ETSY_API_KEY,
-    hasEtsySharedSecret:!!process.env.ETSY_SHARED_SECRET,
-    hasEtsyRedirectUri: !!process.env.ETSY_REDIRECT_URI,
-    etsyRedirectUri:    process.env.ETSY_REDIRECT_URI || "NOT SET",
-    etsyTokenInMemory:  !!etsyStore.accessToken,
-    etsyShopName:       etsyStore.shopName || null,
-    nodeVersion:        process.version,
-    note:               "Token is in-memory only — will reset on redeploy. Reconnect Etsy after each Railway deploy.",
-  });
-});
+// ── 2. ALL API ROUTES ─────────────────────────────────────────────────────────
 
-app.get("/api/debug/routes", (req, res) => {
-  res.json({
-    etsyConnectRouteExists:   true,
-    etsyCallbackRouteExists:  true,
-    etsyStatusRouteExists:    true,
-    printifyStatusRouteExists:true,
-    debugEnvRouteExists:      true,
-  });
-});
+// Debug
+app.get("/api/debug/env", (req, res) => res.json({
+  fileVersion:        "app.js-2025-clean",
+  hasAnthropicKey:    !!ANTHROPIC_KEY,
+  hasPrintifyKey:     !!PRINTIFY_KEY,
+  hasEtsyApiKey:      !!ETSY_API_KEY,
+  hasEtsySharedSecret:!!ETSY_SECRET,
+  hasEtsyRedirectUri: !!ETSY_REDIRECT,
+  etsyRedirectUri:    ETSY_REDIRECT || "NOT SET",
+  etsyTokenInMemory:  !!etsyStore.accessToken,
+  etsyShopName:       etsyStore.shopName || null,
+  nodeVersion:        process.version,
+  memoryNote:         "Token resets on every redeploy. Reconnect Etsy after each Railway deploy.",
+}));
 
+app.get("/api/debug/routes", (req, res) => res.json({
+  fileRunning:              "app.js",
+  etsyConnectRouteExists:   true,
+  etsyCallbackRouteExists:  true,
+  etsyStatusRouteExists:    true,
+  printifyStatusRouteExists:true,
+}));
 
-// ── PKCE ──────────────────────────────────────────────────────────────────────
-function base64url(buf) {
-  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-function generateCodeVerifier() { return base64url(crypto.randomBytes(32)); }
-function generateCodeChallenge(v) {
-  return base64url(crypto.createHash("sha256").update(v).digest());
-}
+// ── PKCE helpers ──────────────────────────────────────────────────────────────
+function b64url(buf) { return buf.toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,""); }
+function makeVerifier()  { return b64url(crypto.randomBytes(32)); }
+function makeChallenge(v){ return b64url(crypto.createHash("sha256").update(v).digest()); }
 
 // ── Etsy fetch ────────────────────────────────────────────────────────────────
-async function etsyFetch(endpoint, opts = {}) {
+async function etsyFetch(ep, opts={}) {
   if (!etsyStore.accessToken) throw new Error("Etsy not connected");
-  const r = await fetch(`https://openapi.etsy.com/v3${endpoint}`, {
+  const r = await fetch(`https://openapi.etsy.com/v3${ep}`, {
     ...opts,
-    headers: {
-      "x-api-key": ETSY_API_KEY,
-      Authorization: `Bearer ${etsyStore.accessToken}`,
-      "Content-Type": "application/json",
-      ...(opts.headers || {}),
-    },
+    headers: { "x-api-key": ETSY_API_KEY, "Authorization": `Bearer ${etsyStore.accessToken}`, "Content-Type": "application/json", ...(opts.headers||{}) },
   });
-  if (!r.ok) { const t = await r.text(); throw new Error(`Etsy ${r.status}: ${t.slice(0, 300)}`); }
+  if (!r.ok) { const t = await r.text(); throw new Error(`Etsy ${r.status}: ${t.slice(0,300)}`); }
   return r.json();
 }
 
 // ── Printify fetch ────────────────────────────────────────────────────────────
-async function printifyFetch(endpoint, opts = {}) {
+async function printifyFetch(ep, opts={}) {
   if (!PRINTIFY_KEY) throw new Error("PRINTIFY_API_KEY not set");
-  const r = await fetch(`https://api.printify.com/v1${endpoint}`, {
+  const r = await fetch(`https://api.printify.com/v1${ep}`, {
     ...opts,
-    headers: {
-      Authorization: `Bearer ${PRINTIFY_KEY}`,
-      "Content-Type": "application/json",
-      ...(opts.headers || {}),
-    },
+    headers: { "Authorization": `Bearer ${PRINTIFY_KEY}`, "Content-Type": "application/json", ...(opts.headers||{}) },
   });
-  if (!r.ok) { const t = await r.text(); throw new Error(`Printify ${r.status}: ${t.slice(0, 400)}`); }
+  if (!r.ok) { const t = await r.text(); throw new Error(`Printify ${r.status}: ${t.slice(0,400)}`); }
   return r.json();
 }
 
 async function getPrintifyShopId() {
   if (printifyStore.shopId) return printifyStore.shopId;
   const shops = await printifyFetch("/shops.json");
-  if (!Array.isArray(shops) || !shops.length) throw new Error("No Printify shops found");
-  printifyStore.shopId = shops[0].id;
+  if (!Array.isArray(shops)||!shops.length) throw new Error("No Printify shops found");
+  printifyStore.shopId   = shops[0].id;
   printifyStore.shopTitle = shops[0].title;
-  console.log(`[Printify] Shop: id=${printifyStore.shopId} title="${printifyStore.shopTitle}"`);
   return printifyStore.shopId;
 }
 
-// ── Catalog search ────────────────────────────────────────────────────────────
-const TYPE_SEARCH_TERMS = {
-  sticker: ["kiss-cut stickers", "kiss cut sticker", "kiss-cut sticker", "sticker sheet", "die cut sticker", "die-cut sticker", "sticker"],
-  poster:  ["enhanced matte paper poster", "matte paper poster", "enhanced matte poster", "poster", "fine art print", "art print", "wall art", "print"],
-  shirt:   ["unisex softstyle t-shirt", "unisex softstyle tshirt", "unisex heavy cotton tee", "unisex staple t-shirt", "unisex t-shirt", "t-shirt", "tee shirt", "tshirt", "tee", "shirt"],
+// ── Catalog ───────────────────────────────────────────────────────────────────
+const TYPE_TERMS = {
+  sticker:["kiss-cut stickers","kiss cut sticker","kiss-cut sticker","sticker sheet","sticker"],
+  poster: ["enhanced matte paper poster","matte paper poster","poster","fine art print","art print","print"],
+  shirt:  ["unisex softstyle t-shirt","unisex heavy cotton tee","unisex staple t-shirt","unisex t-shirt","t-shirt","tee","shirt"],
 };
 
-async function resolveBlueprints(forceRefresh = false) {
+async function resolveBlueprints(force=false) {
   const now = Date.now();
-  if (!forceRefresh && printifyStore.catalog && printifyStore.catalogFetchedAt && now - printifyStore.catalogFetchedAt < CATALOG_TTL_MS) {
-    return printifyStore.catalog;
-  }
-  console.log("[Printify] Fetching catalog...");
+  if (!force && printifyStore.catalog && now - printifyStore.catalogFetchedAt < CATALOG_TTL_MS) return printifyStore.catalog;
   const raw = await printifyFetch("/catalog/blueprints.json");
-  const blueprints = Array.isArray(raw) ? raw : [];
-  console.log(`[Printify] Catalog: ${blueprints.length} blueprints`);
-  if (!blueprints.length) throw new Error("Printify catalog returned 0 blueprints — check API key permissions");
-
-  // Log all titles for diagnostics
-  console.log("[Printify] Blueprint titles:");
-  blueprints.forEach(b => console.log(`  ${b.id}: "${b.title}"`));
-
-  const catalog = { _allBlueprints: blueprints.map(b => ({ id: b.id, title: b.title })) };
-  for (const [type, terms] of Object.entries(TYPE_SEARCH_TERMS)) {
-    let match = null;
-    for (const term of terms) {
-      match = blueprints.find(b => b.title?.toLowerCase().includes(term.toLowerCase()));
-      if (match) { console.log(`[Printify] Match ${type}: term="${term}" → id=${match.id} "${match.title}"`); break; }
-    }
-    catalog[type] = match
-      ? { blueprintId: match.id, blueprintTitle: match.title, found: true }
-      : { blueprintId: null, blueprintTitle: null, found: false };
-    if (!match) console.warn(`[Printify] No match for "${type}". Terms: ${terms.join(", ")}`);
+  const bps = Array.isArray(raw) ? raw : [];
+  console.log(`[Printify] Catalog: ${bps.length} blueprints`);
+  bps.forEach(b => console.log(`  ${b.id}: "${b.title}"`));
+  const cat = { _all: bps.map(b=>({id:b.id,title:b.title})) };
+  for (const [type, terms] of Object.entries(TYPE_TERMS)) {
+    let m = null;
+    for (const t of terms) { m = bps.find(b=>b.title?.toLowerCase().includes(t)); if (m) break; }
+    cat[type] = m ? {blueprintId:m.id,blueprintTitle:m.title,found:true} : {blueprintId:null,blueprintTitle:null,found:false};
+    if (m) console.log(`[Printify] ${type} → id=${m.id} "${m.title}"`);
+    else   console.warn(`[Printify] No match for "${type}"`);
   }
-  printifyStore.catalog = catalog;
+  printifyStore.catalog = cat;
   printifyStore.catalogFetchedAt = now;
-  return catalog;
+  return cat;
 }
 
-// ── Provider scoring ──────────────────────────────────────────────────────────
-const PREFERRED_PROVIDERS = ["monster digital", "printify", "district photo", "sticker mule", "printful", "gooten", "awkward styles"];
 function scoreProvider(p) {
   let s = 0;
-  const title = (p.title || "").toLowerCase();
-  const loc = (p.location?.country || "").toLowerCase();
-  if (loc === "us" || loc === "united states") s += 50;
-  s += Math.min(parseFloat(p.rating || p.score || 0) * 10, 40);
-  for (const n of PREFERRED_PROVIDERS) { if (title.includes(n)) { s += 20; break; } }
+  if ((p.location?.country||"").toLowerCase().match(/^us|united states/)) s += 50;
+  s += Math.min(parseFloat(p.rating||p.score||0)*10, 40);
   return s;
 }
 
 // ── Kitsari AI ────────────────────────────────────────────────────────────────
-const KITSARI_SYSTEM = `You are Kitsari — operator of the Lantern District Market, a nine-tailed celestial fox spirit who has mastered Etsy commerce, Printify print-on-demand, NFT utility design, and brand alchemy.
+const SYS = `You are Kitsari — operator of the Lantern District Market, a nine-tailed celestial fox spirit who has mastered Etsy commerce, Printify print-on-demand, NFT utility design, and brand alchemy.
+PERSONALITY: Sharp, warm, precise, playful. No em dashes. Actionable always.
+COMPLIANCE: Never copy existing sellers, copyrighted designs, or trademarks. Original Celestial Yokai IP only.
+NFT UTILITY: Holder discounts, trait variants, early access, secret pages where relevant.
+FORMAT: Markdown. End every response with: ✦ Kitsari — Lantern District`;
 
-PERSONALITY: Sharp, warm, precise, playful. Lantern-fire confidence. Never generic. No em dashes. Keep responses actionable.
-
-COMPLIANCE: Never copy existing sellers, copyrighted designs, or trademarks. All products must be original Celestial Yokai ecosystem merchandise.
-
-NFT UTILITY: Weave in holder benefits where relevant: holder-only discounts, trait-based variants, early access, secret shop pages, collectible artifacts.
-
-FORMAT: Use markdown. Bold key phrases. Numbered lists for sequences, bullets for options. End every response with: ✦ Kitsari — Lantern District`;
-
-async function askKitsari(prompt, maxTokens = 1600) {
-  const msg = await anthropic.messages.create({
-    model: "claude-opus-4-5",
-    max_tokens: maxTokens,
-    system: KITSARI_SYSTEM,
-    messages: [{ role: "user", content: prompt }],
-  });
-  return msg.content.filter(b => b.type === "text").map(b => b.text).join("\n");
+async function ask(prompt, max=1600) {
+  const m = await anthropic.messages.create({ model:"claude-opus-4-5", max_tokens:max, system:SYS, messages:[{role:"user",content:prompt}] });
+  return m.content.filter(b=>b.type==="text").map(b=>b.text).join("\n");
 }
 
-function parseSection(text, heading) {
-  const re = new RegExp(`##\\s*${heading}\\s*\\n([\\s\\S]+?)(?=\\n##|$)`, "i");
-  const m = text.match(re);
-  return m ? m[1].trim() : "";
-}
-function parseTags(text) {
-  const raw = parseSection(text, "13 ETSY TAGS");
-  return raw.split(/,\s*|\n/)
-    .map(t => t.replace(/^\d+\.\s*/, "").replace(/\*\*/g, "").trim())
-    .filter(t => t.length > 0 && t.length <= 20)
-    .slice(0, 13);
-}
-function parsePrice(text) {
-  const m = text.match(/\$(\d+(?:\.\d+)?)/);
-  return m ? parseFloat(m[1]) : 18.00;
-}
+function sec(text, h) { const m=text.match(new RegExp(`##\\s*${h}\\s*\\n([\\s\\S]+?)(?=\\n##|$)`,"i")); return m?m[1].trim():""; }
+function tags(text) { return sec(text,"13 ETSY TAGS").split(/,\s*|\n/).map(t=>t.replace(/^\d+\.\s*/,"").replace(/\*\*/g,"").trim()).filter(t=>t.length>0&&t.length<=20).slice(0,13); }
+function price(text) { const m=text.match(/\$(\d+(?:\.\d+)?)/); return m?parseFloat(m[1]):18; }
 
 // ════════════════════════════════════════════════════════════════════════════
 // ETSY OAUTH
 // ════════════════════════════════════════════════════════════════════════════
+
 app.get("/api/etsy/debug", (req, res) => res.json({
-  hasApiKey:      !!ETSY_API_KEY,
-  hasSecret:      !!ETSY_SECRET,
-  redirectUri:    ETSY_REDIRECT || "NOT SET",
-  stateStored:    !!etsyStore.state,
-  verifierStored: !!etsyStore.codeVerifier,
-  connected:      !!etsyStore.accessToken,
-  shopName:       etsyStore.shopName || null,
-  connectedAt:    etsyStore.connectedAt || null,
+  hasApiKey:!!ETSY_API_KEY, hasSecret:!!ETSY_SECRET,
+  redirectUri:ETSY_REDIRECT||"NOT SET",
+  connected:!!etsyStore.accessToken, shopName:etsyStore.shopName||null,
 }));
 
 app.get("/api/etsy/connect", (req, res) => {
-  console.log("✅ ETSY CONNECT ROUTE HIT");
-  // TEMP: ?test=1 returns JSON probe instead of redirecting
-  if (req.query.test === "1") {
-    return res.json({ ok: true, route: "/api/etsy/connect", hasKey: !!ETSY_API_KEY, redirectUri: ETSY_REDIRECT || "NOT SET" });
-  }
-  console.log("[Etsy OAuth] Starting Etsy OAuth flow");
-  if (!ETSY_API_KEY) {
-    console.error("[Etsy OAuth] ETSY_API_KEY is not set");
-    return res.status(500).send("<h2>Missing ETSY_API_KEY</h2><p>Add it to Railway environment variables.</p>");
-  }
-  if (!ETSY_REDIRECT) {
-    console.error("[Etsy OAuth] ETSY_REDIRECT_URI is not set");
-    return res.status(500).send("<h2>Missing ETSY_REDIRECT_URI</h2><p>Set it to: https://your-app.railway.app/api/etsy/callback</p>");
-  }
-  const state        = base64url(crypto.randomBytes(16));
-  const codeVerifier = generateCodeVerifier();
-  const challenge    = generateCodeChallenge(codeVerifier);
-  etsyStore.state        = state;
-  etsyStore.codeVerifier = codeVerifier;
+  console.log("✅ /api/etsy/connect HIT");
+  if (!ETSY_API_KEY) return res.status(500).send("<h2>Missing ETSY_API_KEY</h2><p>Add to Railway env vars.</p>");
+  if (!ETSY_REDIRECT) return res.status(500).send("<h2>Missing ETSY_REDIRECT_URI</h2><p>Set to: https://YOUR-APP.railway.app/api/etsy/callback</p>");
+  const state = b64url(crypto.randomBytes(16));
+  const ver   = makeVerifier();
+  etsyStore.state = state; etsyStore.codeVerifier = ver;
   const params = new URLSearchParams({
-    response_type: "code", redirect_uri: ETSY_REDIRECT,
-    scope: "listings_r listings_w shops_r transactions_r",
-    client_id: ETSY_API_KEY, state,
-    code_challenge: challenge,
-    code_challenge_method: "S256",
+    response_type:"code", redirect_uri:ETSY_REDIRECT,
+    scope:"listings_r listings_w shops_r transactions_r",
+    client_id:ETSY_API_KEY, state,
+    code_challenge:makeChallenge(ver), code_challenge_method:"S256",
   });
-  const authUrl = `https://www.etsy.com/oauth/connect?${params.toString()}`;
-  console.log(`[Etsy OAuth] API key present: ${!!ETSY_API_KEY}`);
-  console.log(`[Etsy OAuth] redirect_uri: ${ETSY_REDIRECT}`);
-  console.log(`[Etsy OAuth] scopes: listings_r listings_w shops_r transactions_r`);
-  console.log(`[Etsy OAuth] Full auth URL: ${authUrl}`);
-  res.redirect(authUrl);
+  const url = `https://www.etsy.com/oauth/connect?${params}`;
+  console.log(`[Etsy] redirect_uri=${ETSY_REDIRECT}`);
+  console.log(`[Etsy] auth url=${url}`);
+  res.redirect(url);
 });
 
 app.get("/api/etsy/callback", async (req, res) => {
-  console.log("[Etsy OAuth] Received Etsy callback — query:", JSON.stringify(req.query));
-  const { code, state, error, error_description } = req.query;
-  if (error) {
-    console.error(`[Etsy OAuth] Etsy returned error: ${error} — ${error_description}`);
-    return res.status(400).send(`<h2>Etsy Authorization Error</h2><p><strong>${error}</strong>: ${error_description||"unknown"}</p><p><a href="/api/etsy/connect">Try again</a></p>`);
-  }
-  if (!code) {
-    console.error(`[Etsy OAuth] No code in callback. redirect_uri=${ETSY_REDIRECT}`);
-    return res.status(400).send(`<h2>Missing Authorization Code</h2><p>Redirect URI must exactly match:<br><code>${ETSY_REDIRECT}</code></p><p><a href="/api/etsy/connect">Start over</a> | <a href="/api/etsy/debug">Debug</a></p>`);
-  }
-  if (!state || state !== etsyStore.state) {
-    console.error(`[Etsy OAuth] State mismatch — received: ${state}, stored: ${etsyStore.state}`);
-    return res.status(400).send(`<h2>OAuth State Mismatch</h2><p>Server may have restarted. <a href="/api/etsy/connect">Start over</a></p>`);
-  }
+  console.log("[Etsy] callback query:", JSON.stringify(req.query));
+  const {code, state, error, error_description} = req.query;
+  if (error) return res.status(400).send(`<h2>Etsy Error</h2><p>${error}: ${error_description}</p><a href="/api/etsy/connect">Retry</a>`);
+  if (!code)  return res.status(400).send(`<h2>No code</h2><p>redirect_uri must exactly match: <code>${ETSY_REDIRECT}</code></p><a href="/api/etsy/connect">Retry</a>`);
+  if (!state||state!==etsyStore.state) return res.status(400).send(`<h2>State mismatch</h2><a href="/api/etsy/connect">Start over</a>`);
   try {
-    console.log("[Etsy OAuth] Exchanging authorization code for token...");
     const tr = await fetch("https://api.etsy.com/v3/public/oauth/token", {
-      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code", client_id: ETSY_API_KEY,
-        redirect_uri: ETSY_REDIRECT, code, code_verifier: etsyStore.codeVerifier,
-      }),
+      method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body:new URLSearchParams({grant_type:"authorization_code",client_id:ETSY_API_KEY,redirect_uri:ETSY_REDIRECT,code,code_verifier:etsyStore.codeVerifier}),
     });
-    if (!tr.ok) {
-      const errText = await tr.text();
-      console.error(`[Etsy OAuth] Etsy token exchange failed (${tr.status}): ${errText}`);
-      return res.status(500).send(`<h2>Token Exchange Failed</h2><p>Status ${tr.status} — check Railway logs.</p><p><a href="/api/etsy/connect">Retry</a></p>`);
-    }
-    const tokens = await tr.json();
-    etsyStore.accessToken  = tokens.access_token;
-    etsyStore.refreshToken = tokens.refresh_token;
+    if (!tr.ok) { const e=await tr.text(); console.error("[Etsy] token exchange failed:",e); return res.status(500).send(`<h2>Token Exchange Failed (${tr.status})</h2><pre>${e}</pre><a href="/api/etsy/connect">Retry</a>`); }
+    const tok = await tr.json();
+    etsyStore.accessToken  = tok.access_token;
+    etsyStore.refreshToken = tok.refresh_token;
     etsyStore.connectedAt  = new Date().toISOString();
-    etsyStore.state        = null;
-    etsyStore.codeVerifier = null;
-    console.log("[Etsy OAuth] Etsy token exchange success — fetching shop info...");
+    etsyStore.state = null; etsyStore.codeVerifier = null;
+    console.log("[Etsy] token exchange SUCCESS");
     try {
       const sd = await etsyFetch("/application/shops?limit=1");
-      if (sd?.results?.[0]) {
-        etsyStore.shopId   = sd.results[0].shop_id;
-        etsyStore.shopName = sd.results[0].shop_name;
-        console.log(`[Etsy OAuth] Shop found: id=${etsyStore.shopId} name="${etsyStore.shopName}"`);
-      }
-    } catch (shopErr) {
-      console.warn("[Etsy OAuth] Shop fetch failed (non-fatal):", shopErr.message);
-    }
+      if (sd?.results?.[0]) { etsyStore.shopId=sd.results[0].shop_id; etsyStore.shopName=sd.results[0].shop_name; }
+      console.log(`[Etsy] shop: ${etsyStore.shopName}`);
+    } catch(e) { console.warn("[Etsy] shop fetch failed (non-fatal):", e.message); }
     res.redirect("/?etsy=connected");
-  } catch (err) {
-    console.error("[Etsy OAuth] OAuth callback exception:", err.message);
-    res.status(500).send(`<h2>OAuth Failed</h2><p>${err.message}</p><p><a href="/api/etsy/connect">Retry</a></p>`);
-  }
+  } catch(e) { console.error("[Etsy] callback error:", e.message); res.status(500).send(`<h2>OAuth Failed</h2><p>${e.message}</p><a href="/api/etsy/connect">Retry</a>`); }
 });
 
 app.get("/api/etsy/status", (req, res) => {
-  if (!ETSY_API_KEY) {
-    console.log("[Etsy] status: unconfigured — ETSY_API_KEY missing");
-    return res.json({ connected: false, status: "unconfigured", message: "ETSY_API_KEY not set in Railway." });
-  }
-  if (!etsyStore.accessToken) {
-    console.log("[Etsy] status: disconnected — no access token");
-    return res.json({ connected: false, status: "disconnected", message: "Etsy disconnected — reconnect required." });
-  }
-  console.log("[Etsy] status: connected — shop=" + (etsyStore.shopName || "unknown"));
-  res.json({ connected: true, status: "connected", shopId: etsyStore.shopId, shopName: etsyStore.shopName, connectedAt: etsyStore.connectedAt, warning: "Token stored in memory — will reset on redeploy." });
+  if (!ETSY_API_KEY) return res.json({connected:false,status:"unconfigured",message:"ETSY_API_KEY not set."});
+  if (!etsyStore.accessToken) return res.json({connected:false,status:"disconnected",message:"Etsy disconnected — reconnect required."});
+  res.json({connected:true,status:"connected",shopId:etsyStore.shopId,shopName:etsyStore.shopName,connectedAt:etsyStore.connectedAt,warning:"Token is in-memory — resets on redeploy."});
 });
 
 app.get("/api/etsy/shop", async (req, res) => {
-  if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
+  if (!etsyStore.accessToken) return res.status(401).json({error:"Etsy not connected."});
   try {
-    if (!etsyStore.shopId) {
-      const d = await etsyFetch("/application/shops?limit=1");
-      if (d?.results?.[0]) { etsyStore.shopId = d.results[0].shop_id; etsyStore.shopName = d.results[0].shop_name; }
-    }
+    if (!etsyStore.shopId) { const d=await etsyFetch("/application/shops?limit=1"); if(d?.results?.[0]){etsyStore.shopId=d.results[0].shop_id;etsyStore.shopName=d.results[0].shop_name;} }
     res.json(await etsyFetch(`/application/shops/${etsyStore.shopId}`));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch(e) { res.status(500).json({error:e.message}); }
 });
 
 app.get("/api/etsy/listings", async (req, res) => {
-  if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
-  try {
-    const state = req.query.state || "active";
-    const limit = Math.min(parseInt(req.query.limit) || 25, 100);
-    res.json(await etsyFetch(`/application/shops/${etsyStore.shopId}/listings?state=${state}&limit=${limit}`));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  if (!etsyStore.accessToken) return res.status(401).json({error:"Etsy not connected."});
+  try { res.json(await etsyFetch(`/application/shops/${etsyStore.shopId}/listings?state=${req.query.state||"active"}&limit=${Math.min(parseInt(req.query.limit)||25,100)}`)); }
+  catch(e) { res.status(500).json({error:e.message}); }
 });
 
 app.post("/api/etsy/create-draft", async (req, res) => {
-  if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
-  const { title, description, tags, price, type } = req.body;
-  if (!title || !description) return res.status(400).json({ error: "Title and description required." });
+  if (!etsyStore.accessToken) return res.status(401).json({error:"Etsy not connected."});
+  const {title,description,tags:t,price:p,type} = req.body;
+  if (!title||!description) return res.status(400).json({error:"Title and description required."});
   try {
-    const listing = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`, {
-      method: "POST",
-      body: JSON.stringify({
-        quantity: 999, title: title.slice(0, 140), description,
-        price: parseFloat(price) || 18.00, who_made: "i_did", when_made: "made_to_order",
-        taxonomy_id: 2078, type: type || "download",
-        tags: (tags || []).slice(0, 13), state: "draft",
-      }),
-    });
-    res.json({ success: true, listingId: listing.listing_id, url: listing.url, state: "draft" });
-  } catch (err) { console.error("create-draft:", err.message); res.status(500).json({ error: err.message }); }
+    const l = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`, {method:"POST",body:JSON.stringify({quantity:999,title:title.slice(0,140),description,price:parseFloat(p)||18,who_made:"i_did",when_made:"made_to_order",taxonomy_id:2078,type:type||"download",tags:(t||[]).slice(0,13),state:"draft"})});
+    res.json({success:true,listingId:l.listing_id,url:l.url,state:"draft"});
+  } catch(e) { res.status(500).json({error:e.message}); }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -357,598 +231,204 @@ app.post("/api/etsy/create-draft", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 app.get("/api/printify/status", async (req, res) => {
-  if (!PRINTIFY_KEY) {
-    console.log("[Printify] status: unconfigured — PRINTIFY_API_KEY missing");
-    return res.json({ connected: false, message: "PRINTIFY_API_KEY not set." });
-  }
-  // 8-second timeout so we never hang
-  const timer = setTimeout(() => {
-    if (!res.headersSent) {
-      console.error("[Printify] status: timed out after 8s");
-      res.json({ connected: false, message: "Printify API timed out after 8s." });
-    }
-  }, 8000);
+  if (!PRINTIFY_KEY) return res.json({connected:false,message:"PRINTIFY_API_KEY not set."});
+  const timer = setTimeout(()=>{ if(!res.headersSent) res.json({connected:false,message:"Printify timed out."}); },8000);
   try {
-    console.log("[Printify] status: calling Printify API...");
     const shops = await printifyFetch("/shops.json");
     clearTimeout(timer);
     if (res.headersSent) return;
-    if (Array.isArray(shops) && shops.length) {
-      printifyStore.shopId   = shops[0].id;
-      printifyStore.shopTitle = shops[0].title;
-    }
-    console.log("[Printify] status: connected — " + (Array.isArray(shops) ? shops.length : 0) + " shop(s)");
-    res.json({ connected: true, shopCount: Array.isArray(shops) ? shops.length : 0, shops: Array.isArray(shops) ? shops.map(s => ({ id: s.id, title: s.title })) : [], activeShopId: printifyStore.shopId });
-  } catch (err) {
-    clearTimeout(timer);
-    if (res.headersSent) return;
-    console.error("[Printify] status check failed:", err.message);
-    res.json({ connected: false, message: err.message });
-  }
+    if (Array.isArray(shops)&&shops.length) { printifyStore.shopId=shops[0].id; printifyStore.shopTitle=shops[0].title; }
+    res.json({connected:true,shopCount:Array.isArray(shops)?shops.length:0,shops:Array.isArray(shops)?shops.map(s=>({id:s.id,title:s.title})):[],activeShopId:printifyStore.shopId});
+  } catch(e) { clearTimeout(timer); if(!res.headersSent) res.json({connected:false,message:e.message}); }
 });
 
 app.get("/api/printify/shops", async (req, res) => {
-  try { res.json(await printifyFetch("/shops.json")); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try { res.json(await printifyFetch("/shops.json")); } catch(e) { res.status(500).json({error:e.message}); }
 });
 
 app.get("/api/printify/catalog", async (req, res) => {
-  if (!PRINTIFY_KEY) return res.status(400).json({ error: "PRINTIFY_API_KEY not configured." });
+  if (!PRINTIFY_KEY) return res.status(400).json({error:"PRINTIFY_API_KEY not configured."});
   try {
-    const catalog = await resolveBlueprints(req.query.refresh === "true");
-    const { _allBlueprints, ...supported } = catalog;
-    res.json({
-      supported,
-      foundCount: Object.values(supported).filter(v => v.found).length,
-      totalBlueprints: (_allBlueprints || []).length,
-      allBlueprints: _allBlueprints || [],
-      cachedAt: printifyStore.catalogFetchedAt,
-    });
-  } catch (err) { console.error("[Printify] catalog error:", err.message); res.status(500).json({ error: err.message }); }
+    const cat = await resolveBlueprints(req.query.refresh==="true");
+    const {_all,...supported} = cat;
+    res.json({supported,foundCount:Object.values(supported).filter(v=>v.found).length,totalBlueprints:(_all||[]).length,allBlueprints:_all||[],cachedAt:printifyStore.catalogFetchedAt});
+  } catch(e) { res.status(500).json({error:e.message}); }
 });
 
 app.get("/api/printify/blueprint-info/:blueprintId?", async (req, res) => {
-  const blueprintId = parseInt(req.params.blueprintId || req.query.blueprintId);
-  if (!blueprintId) return res.status(400).json({ error: "blueprintId required" });
-  console.log(`[Printify] blueprint-info: id=${blueprintId}`);
+  const bpId = parseInt(req.params.blueprintId||req.query.blueprintId);
+  if (!bpId) return res.status(400).json({error:"blueprintId required"});
   try {
-    const providersRaw = await printifyFetch(`/catalog/blueprints/${blueprintId}/print_providers.json`);
-    const providers = Array.isArray(providersRaw) ? providersRaw : [];
-    console.log(`[Printify] ${providers.length} provider(s): ${providers.map(p => `${p.id}:"${p.title}"`).join(", ")}`);
-    if (!providers.length) return res.status(404).json({ error: `No providers for blueprint ${blueprintId}` });
-
-    const scored = providers.map(p => ({ ...p, _score: scoreProvider(p) })).sort((a, b) => b._score - a._score);
-    let best = scored[0];
-    console.log(`[Printify] Best provider: id=${best.id} "${best.title}" score=${best._score} loc=${best.location?.country || "?"}`);
-
-    // Get variants, try fallback providers if empty
-    let variantList = [], usedProvider = best;
+    const pr = await printifyFetch(`/catalog/blueprints/${bpId}/print_providers.json`);
+    const providers = Array.isArray(pr)?pr:[];
+    if (!providers.length) return res.status(404).json({error:`No providers for blueprint ${bpId}`});
+    const scored = providers.map(p=>({...p,_score:scoreProvider(p)})).sort((a,b)=>b._score-a._score);
+    let best=scored[0], vlist=[], used=best;
     for (const prov of scored) {
-      const vRaw = await printifyFetch(`/catalog/blueprints/${blueprintId}/print_providers/${prov.id}/variants.json`);
-      variantList = Array.isArray(vRaw) ? vRaw : (Array.isArray(vRaw?.variants) ? vRaw.variants : []);
-      console.log(`[Printify] Provider ${prov.id} has ${variantList.length} variant(s)`);
-      if (variantList.length) { usedProvider = prov; break; }
+      const vr = await printifyFetch(`/catalog/blueprints/${bpId}/print_providers/${prov.id}/variants.json`);
+      vlist = Array.isArray(vr)?vr:(Array.isArray(vr?.variants)?vr.variants:[]);
+      if (vlist.length){used=prov;break;}
     }
-    if (!variantList.length) return res.status(404).json({ error: `No variants found for blueprint ${blueprintId} with any provider` });
-
-    const v = variantList[0];
-    const vTitle = v.title || (v.options ? Object.values(v.options).join(" / ") : `Variant ${v.id}`);
-    console.log(`[Printify] Using variant id=${v.id} title="${vTitle}"`);
-
-    res.json({
-      blueprintId,
-      provider: { id: usedProvider.id, title: usedProvider.title, score: usedProvider._score, location: usedProvider.location?.country || "unknown" },
-      variant: { id: v.id, title: vTitle },
-      variantCount: variantList.length,
-      allProviders: scored.map(p => ({ id: p.id, title: p.title, score: p._score, location: p.location?.country || "?" })),
-    });
-  } catch (err) { console.error(`[Printify] blueprint-info error:`, err.message); res.status(500).json({ error: err.message }); }
+    if (!vlist.length) return res.status(404).json({error:`No variants for blueprint ${bpId}`});
+    const v=vlist[0];
+    res.json({blueprintId:bpId,provider:{id:used.id,title:used.title,score:used._score,location:used.location?.country||"?"},variant:{id:v.id,title:v.title||(v.options?Object.values(v.options).join("/"):`Variant ${v.id}`)},variantCount:vlist.length,allProviders:scored.map(p=>({id:p.id,title:p.title,score:p._score,location:p.location?.country||"?"}))});
+  } catch(e) { res.status(500).json({error:e.message}); }
 });
 
 app.get("/api/printify/products", async (req, res) => {
-  try { const shopId = await getPrintifyShopId(); res.json(await printifyFetch(`/shops/${shopId}/products.json?limit=20&page=1`)); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try { const sid=await getPrintifyShopId(); res.json(await printifyFetch(`/shops/${sid}/products.json?limit=20&page=1`)); }
+  catch(e) { res.status(500).json({error:e.message}); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/printify/upload-image
-// Uploads artwork to Printify and returns the image ID.
-// Accepts: { imageUrl } OR { imageBase64, mimeType }
-// ─────────────────────────────────────────────────────────────────────────────
 app.post("/api/printify/upload-image", async (req, res) => {
-  const { imageUrl, imageBase64, mimeType = "image/png" } = req.body;
-  if (!imageUrl && !imageBase64) return res.status(400).json({ error: "imageUrl or imageBase64 required" });
-
-  const fileName = `kitsari_art_${Date.now()}.png`;
-  console.log(`[Printify] Uploading image: ${imageUrl ? `url=${imageUrl}` : "base64 data"}`);
-
+  const {imageUrl,imageBase64,mimeType="image/png"} = req.body;
+  if (!imageUrl&&!imageBase64) return res.status(400).json({error:"imageUrl or imageBase64 required"});
+  const fname = `kitsari_${Date.now()}.png`;
   try {
-    let payload;
-    if (imageBase64) {
-      // Base64 upload — clean data URL prefix if present
-      const cleanB64 = imageBase64.replace(/^data:[^;]+;base64,/, "");
-      payload = { file_name: fileName, contents: cleanB64 };
-    } else {
-      payload = { file_name: fileName, url: imageUrl };
-    }
-
-    const result = await printifyFetch("/uploads/images.json", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-
-    console.log(`[Printify] Image uploaded — id=${result.id} preview=${result.preview_url || "none"}`);
-    res.json({
-      success: true,
-      imageId: result.id,
-      previewUrl: result.preview_url || null,
-      fileName: result.file_name || fileName,
-    });
-  } catch (err) {
-    console.error(`[Printify] upload-image FAILED: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
+    const payload = imageBase64 ? {file_name:fname,contents:imageBase64.replace(/^data:[^;]+;base64,/,"")} : {file_name:fname,url:imageUrl};
+    const r = await printifyFetch("/uploads/images.json",{method:"POST",body:JSON.stringify(payload)});
+    res.json({success:true,imageId:r.id,previewUrl:r.preview_url||null});
+  } catch(e) { res.status(500).json({error:e.message}); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/printify/create-product
-// Now REQUIRES a printifyImageId (from /api/printify/upload-image).
-// Will NOT attempt creation without a valid image attached.
-// ─────────────────────────────────────────────────────────────────────────────
 app.post("/api/printify/create-product", async (req, res) => {
-  const { title, description, blueprintId, printProviderId, variantId, printifyImageId, price } = req.body;
-
-  if (!title)            return res.status(400).json({ error: "title required" });
-  if (!blueprintId)      return res.status(400).json({ error: "blueprintId required — run catalog fetch first" });
-  if (!printProviderId)  return res.status(400).json({ error: "printProviderId required — run blueprint-info first" });
-  if (!variantId)        return res.status(400).json({ error: "variantId required — run blueprint-info first" });
-  if (!printifyImageId)  return res.status(400).json({ error: "printifyImageId required — upload artwork first via /api/printify/upload-image" });
-
-  const bpId  = parseInt(blueprintId);
-  const prvId = parseInt(printProviderId);
-  const varId = parseInt(variantId);
-
-  console.log(`[Printify] create-product — bp=${bpId} provider=${prvId} variant=${varId} imageId=${printifyImageId} price=${price} title="${title}"`);
-
+  const {title,description,blueprintId,printProviderId,variantId,printifyImageId,price:p} = req.body;
+  if (!title)           return res.status(400).json({error:"title required"});
+  if (!blueprintId)     return res.status(400).json({error:"blueprintId required"});
+  if (!printProviderId) return res.status(400).json({error:"printProviderId required"});
+  if (!variantId)       return res.status(400).json({error:"variantId required"});
+  if (!printifyImageId) return res.status(400).json({error:"printifyImageId required — upload artwork first"});
+  const bpId=parseInt(blueprintId),prvId=parseInt(printProviderId),varId=parseInt(variantId);
+  console.log(`[Printify] create-product bp=${bpId} prv=${prvId} var=${varId} img=${printifyImageId}`);
   try {
-    const shopId = await getPrintifyShopId();
-
-    const payload = {
-      title:             title.slice(0, 140),
-      description:       description || title,
-      blueprint_id:      bpId,
-      print_provider_id: prvId,
-      variants:          [{ id: varId, price: Math.round((parseFloat(price) || 18.00) * 100), is_enabled: true }],
-      print_areas: [{
-        variant_ids:  [varId],
-        placeholders: [{
-          position: "front",
-          images:   [{ id: printifyImageId, x: 0.5, y: 0.5, scale: 1, angle: 0 }],
-        }],
-      }],
-    };
-
-    console.log(`[Printify] Submitting payload (desc truncated):`, JSON.stringify({ ...payload, description: (payload.description || "").slice(0, 60) + "..." }));
-
-    const product = await printifyFetch(`/shops/${shopId}/products.json`, {
-      method: "POST", body: JSON.stringify(payload),
-    });
-
-    console.log(`[Printify] Product created — id=${product.id} title="${product.title}"`);
-    res.json({ success: true, printifyProductId: product.id, title: product.title, blueprintId: bpId, printProviderId: prvId, variantId: varId, shopId });
-  } catch (err) {
-    console.error(`[Printify] create-product FAILED: ${err.message}`);
-    res.status(500).json({ error: err.message, debug: { blueprintId: bpId, printProviderId: prvId, variantId: varId, imageId: printifyImageId } });
-  }
+    const sid = await getPrintifyShopId();
+    const prod = await printifyFetch(`/shops/${sid}/products.json`,{method:"POST",body:JSON.stringify({
+      title:title.slice(0,140),description:description||title,blueprint_id:bpId,print_provider_id:prvId,
+      variants:[{id:varId,price:Math.round((parseFloat(p)||18)*100),is_enabled:true}],
+      print_areas:[{variant_ids:[varId],placeholders:[{position:"front",images:[{id:printifyImageId,x:0.5,y:0.5,scale:1,angle:0}]}]}],
+    })});
+    res.json({success:true,printifyProductId:prod.id,title:prod.title,blueprintId:bpId,printProviderId:prvId,variantId:varId});
+  } catch(e) { res.status(500).json({error:e.message,debug:{blueprintId:bpId,printProviderId:prvId,variantId:varId,imageId:printifyImageId}}); }
 });
 
 app.post("/api/printify/publish-to-etsy", async (req, res) => {
-  if (!etsyStore.accessToken) return res.status(401).json({ error: "Etsy not connected." });
-  const { printifyProductId, title, description, tags, price, productType, aiDraft } = req.body;
-  const resolvedTitle = (title || parseSection(aiDraft || "", "ETSY SEO TITLE") || "Celestial Yokai Product").replace(/\*\*/g, "").trim().slice(0, 140);
-  const resolvedDesc  = description || parseSection(aiDraft || "", "DESCRIPTION") || resolvedTitle;
-  const resolvedTags  = Array.isArray(tags) && tags.length ? tags.slice(0, 13) : parseTags(aiDraft || "");
-  const resolvedPrice = parseFloat(price) || parsePrice(aiDraft || "") || 18.00;
-  const isPhysical    = ["shirt", "poster", "sticker"].includes(productType);
-  console.log(`[Etsy] publish-to-etsy — title="${resolvedTitle}" tags=${resolvedTags.length} price=${resolvedPrice}`);
+  if (!etsyStore.accessToken) return res.status(401).json({error:"Etsy not connected."});
+  const {printifyProductId,productType,aiDraft=""} = req.body;
+  const t  = (sec(aiDraft,"ETSY SEO TITLE")||"Celestial Yokai Product").replace(/\*\*/g,"").trim().slice(0,140);
+  const d  = sec(aiDraft,"DESCRIPTION")||t;
+  const tg = tags(aiDraft);
+  const pr = price(aiDraft)||18;
+  const isPhys = ["shirt","poster","sticker"].includes(productType);
   try {
-    const listing = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`, {
-      method: "POST",
-      body: JSON.stringify({
-        quantity: 999, title: resolvedTitle, description: resolvedDesc,
-        price: resolvedPrice, who_made: "i_did", when_made: "made_to_order",
-        taxonomy_id: isPhysical ? 68887794 : 2078,
-        type: isPhysical ? "physical" : "download",
-        tags: resolvedTags, state: "draft",
-      }),
-    });
-    console.log(`[Etsy] Draft created — id=${listing.listing_id} url=${listing.url}`);
-    res.json({ success: true, listingId: listing.listing_id, etsyUrl: listing.url, printifyProductId: printifyProductId || null, state: "draft", title: resolvedTitle, tagCount: resolvedTags.length, publishLocked: "Autonomous publishing is locked until draft quality, Etsy compliance, and Printify sync are verified." });
-  } catch (err) { console.error(`[Etsy] publish-to-etsy FAILED: ${err.message}`); res.status(500).json({ error: err.message }); }
+    const l = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`,{method:"POST",body:JSON.stringify({quantity:999,title:t,description:d,price:pr,who_made:"i_did",when_made:"made_to_order",taxonomy_id:isPhys?68887794:2078,type:isPhys?"physical":"download",tags:tg,state:"draft"})});
+    res.json({success:true,listingId:l.listing_id,etsyUrl:l.url,printifyProductId:printifyProductId||null,state:"draft",tagCount:tg.length,publishLocked:"Publishing locked until quality/compliance verified."});
+  } catch(e) { res.status(500).json({error:e.message}); }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ARTWORK GENERATION
+// ART GENERATION
 // ════════════════════════════════════════════════════════════════════════════
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/art/generate
-// Uses Claude to generate a detailed visual prompt for the artwork concept,
-// then calls Claude's image generation capability if available.
-// Returns a prompt + a placeholder SVG artwork for immediate use.
-//
-// NOTE: Claude does not generate images natively. This route:
-// 1. Generates a detailed visual prompt via Claude text
-// 2. Creates a high-quality SVG placeholder that represents the sigil/design
-// 3. Converts SVG → base64 for Printify upload
-//
-// To use real AI images: integrate an image generation API (DALL-E, Stability AI,
-// etc.) and pass the returned URL to /api/printify/upload-image.
-// ─────────────────────────────────────────────────────────────────────────────
 app.post("/api/art/generate", async (req, res) => {
-  const { concept, stickerStyle = "sigil", productType = "sticker", theme } = req.body;
-
-  console.log(`[Art] Generating artwork — style="${stickerStyle}" concept="${concept}"`);
-
-  // Step 1: Generate visual prompt via Claude
-  const promptRequest = `You are a visual art director for the Celestial Yokai brand. Create a precise, detailed visual prompt for AI image generation of a ${productType} design.
-
-Style: ${stickerStyle}
-Concept: ${concept || theme || "Kitsari fox sigil / Lantern District emblem"}
-Product: ${productType === "sticker" ? "Kiss-cut vinyl sticker, needs clean transparent/white background" : productType}
-
-Generate:
-
-## VISUAL PROMPT
-A single dense paragraph (80-120 words) describing the artwork for an AI image generator. Include: subject, style, colors, mood, technical specs. Must specify: transparent background, vector-style, clean edges suitable for printing. Celestial Yokai aesthetic — mystical, anime-influenced, dark cosmic palette with gold/purple accents.
-
-## DESIGN NOTES
-3 bullet points of key design decisions that make this work as a ${productType}.
-
-## COLOR PALETTE
-Primary: [hex], Secondary: [hex], Accent: [hex], Background: transparent or white`;
-
+  const {concept,stickerStyle="sigil",productType="sticker",theme} = req.body;
   try {
-    const aiResponse = await askKitsari(promptRequest, 800);
-    const visualPrompt = parseSection(aiResponse, "VISUAL PROMPT");
-    const designNotes  = parseSection(aiResponse, "DESIGN NOTES");
-
-    // Step 2: Generate SVG placeholder artwork
-    // This is a real, print-ready SVG sigil that can be uploaded to Printify.
-    // Replace this section with a real image generation API call for production.
-    const svgArt = generateSigilSVG(concept || theme || stickerStyle, stickerStyle);
-    const svgBase64 = Buffer.from(svgArt).toString("base64");
-    const dataUrl = `data:image/svg+xml;base64,${svgBase64}`;
-
-    console.log(`[Art] Artwork generated — SVG ${svgArt.length} chars`);
-
-    res.json({
-      success:       true,
-      visualPrompt,
-      designNotes,
-      fullAiResponse: aiResponse,
-      // Artwork as base64 data URL — ready for display and Printify upload
-      artworkDataUrl:  dataUrl,
-      artworkBase64:   svgBase64,
-      artworkMimeType: "image/svg+xml",
-      artworkType:     "svg_placeholder",
-      note: "SVG sigil generated. For photorealistic art, integrate DALL-E or Stability AI and pass the image URL to /api/printify/upload-image.",
-    });
-  } catch (err) {
-    console.error(`[Art] generate error: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
+    const aiResp = await ask(`You are a visual art director for Celestial Yokai brand. Create a precise visual prompt for AI image generation.\nStyle: ${stickerStyle}\nConcept: ${concept||theme||"Kitsari fox sigil"}\nProduct: ${productType}\n\n## VISUAL PROMPT\nA single dense paragraph (80-120 words) for an AI image generator. Specify transparent background, vector-style, clean edges. Celestial Yokai aesthetic — mystical, anime-influenced, dark cosmic with gold/purple accents.\n\n## DESIGN NOTES\n3 bullet points of key design decisions.\n\n## COLOR PALETTE\nPrimary: [hex], Secondary: [hex], Accent: [hex]`, 800);
+    const vp  = sec(aiResp,"VISUAL PROMPT");
+    const svg = makeSigil(concept||theme||stickerStyle, stickerStyle);
+    const b64 = Buffer.from(svg).toString("base64");
+    res.json({success:true,visualPrompt:vp,fullAiResponse:aiResp,artworkDataUrl:`data:image/svg+xml;base64,${b64}`,artworkBase64:b64,artworkMimeType:"image/svg+xml",artworkType:"svg_placeholder"});
+  } catch(e) { res.status(500).json({error:e.message}); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SVG Sigil Generator — creates a print-ready 1200×1200 sticker design
-// Pure SVG, no external deps. Suitable for Printify upload.
-// ─────────────────────────────────────────────────────────────────────────────
-function generateSigilSVG(concept = "", style = "sigil") {
-  const seed = concept.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const rng = (n) => ((seed * 9301 + n * 49297) % 233280) / 233280;
-
-  // Color palettes by style
-  const PALETTES = {
-    sigil:    { primary: "#c084fc", secondary: "#9b5cf6", accent: "#e8c97a", glow: "rgba(192,132,252,0.6)" },
-    seal:     { primary: "#e8c97a", secondary: "#b45309", accent: "#c084fc", glow: "rgba(232,201,122,0.6)" },
-    emblem:   { primary: "#67e8f9", secondary: "#0e7490", accent: "#9b5cf6", glow: "rgba(103,232,249,0.6)" },
-    warning:  { primary: "#ff6b6b", secondary: "#c41e3a", accent: "#e8c97a", glow: "rgba(255,107,107,0.6)" },
-    kitsari:  { primary: "#c084fc", secondary: "#e8c97a", accent: "#ffffff", glow: "rgba(192,132,252,0.7)" },
-    faction:  { primary: "#4ade80", secondary: "#166534", accent: "#e8c97a", glow: "rgba(74,222,128,0.6)" },
-  };
-  const pal = PALETTES[style] || PALETTES.sigil;
-
-  // Generate a unique but consistent geometric pattern from the concept seed
-  const rings = 3 + Math.floor(rng(1) * 2);
-  const petals = 6 + Math.floor(rng(2) * 6);
-  const innerRot = rng(3) * 360;
-  const hasMoon = rng(4) > 0.4;
-  const hasRunes = rng(5) > 0.3;
-
-  // Core geometry
-  const cx = 600, cy = 600, baseR = 420;
-
-  let paths = "";
-
-  // Outer ring with glow
-  paths += `<circle cx="${cx}" cy="${cy}" r="${baseR}" fill="none" stroke="${pal.primary}" stroke-width="3" opacity="0.9"/>`;
-  paths += `<circle cx="${cx}" cy="${cy}" r="${baseR + 8}" fill="none" stroke="${pal.primary}" stroke-width="1" opacity="0.3"/>`;
-
-  // Inner rings
-  for (let r = 1; r <= rings; r++) {
-    const rad = baseR * (0.75 - r * 0.15);
-    paths += `<circle cx="${cx}" cy="${cy}" r="${rad}" fill="none" stroke="${pal.secondary}" stroke-width="${2 - r * 0.3}" opacity="${0.7 - r * 0.1}" stroke-dasharray="${r % 2 === 0 ? "none" : "8,4"}"/>`;
-  }
-
-  // Radiating lines (like a compass rose)
-  for (let i = 0; i < petals; i++) {
-    const angle = (i / petals) * 360 + innerRot;
-    const rad = angle * Math.PI / 180;
-    const x1 = cx + Math.cos(rad) * baseR * 0.25;
-    const y1 = cy + Math.sin(rad) * baseR * 0.25;
-    const x2 = cx + Math.cos(rad) * baseR * 0.92;
-    const y2 = cy + Math.sin(rad) * baseR * 0.92;
-    paths += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${pal.accent}" stroke-width="1.5" opacity="0.6"/>`;
-  }
-
-  // Petal/flame shapes
-  const flameCount = Math.floor(petals / 2);
-  for (let i = 0; i < flameCount; i++) {
-    const angle = (i / flameCount) * 360 + innerRot + (180 / flameCount);
-    const rad = angle * Math.PI / 180;
-    const tipX = cx + Math.cos(rad) * baseR * 0.78;
-    const tipY = cy + Math.sin(rad) * baseR * 0.78;
-    const base1X = cx + Math.cos(rad + 0.25) * baseR * 0.42;
-    const base1Y = cy + Math.sin(rad + 0.25) * baseR * 0.42;
-    const base2X = cx + Math.cos(rad - 0.25) * baseR * 0.42;
-    const base2Y = cy + Math.sin(rad - 0.25) * baseR * 0.42;
-    paths += `<path d="M ${tipX.toFixed(1)},${tipY.toFixed(1)} Q ${(cx+Math.cos(rad+0.6)*baseR*0.6).toFixed(1)},${(cy+Math.sin(rad+0.6)*baseR*0.6).toFixed(1)} ${base1X.toFixed(1)},${base1Y.toFixed(1)} L ${base2X.toFixed(1)},${base2Y.toFixed(1)} Q ${(cx+Math.cos(rad-0.6)*baseR*0.6).toFixed(1)},${(cy+Math.sin(rad-0.6)*baseR*0.6).toFixed(1)} ${tipX.toFixed(1)},${tipY.toFixed(1)} Z" fill="${pal.primary}" opacity="0.18" stroke="${pal.primary}" stroke-width="1"/>`;
-  }
-
-  // Central symbol — fox eye / moon glyph
-  if (style === "kitsari" || style === "sigil") {
-    // Fox eye
-    paths += `<ellipse cx="${cx}" cy="${cy}" rx="90" ry="50" fill="${pal.primary}" opacity="0.9"/>`;
-    paths += `<ellipse cx="${cx}" cy="${cy}" rx="50" ry="46" fill="#0a0118"/>`;
-    paths += `<circle cx="${cx + 12}" cy="${cy - 8}" r="10" fill="${pal.accent}" opacity="0.9"/>`;
-  } else if (style === "seal" || style === "emblem") {
-    // Lantern shape
-    paths += `<rect x="${cx - 45}" y="${cy - 60}" width="90" height="120" rx="12" fill="${pal.primary}" opacity="0.85"/>`;
-    paths += `<rect x="${cx - 30}" y="${cy - 42}" width="60" height="84" rx="6" fill="#0a0118"/>`;
-    paths += `<rect x="${cx - 3}" y="${cy - 22}" width="6" height="44" fill="${pal.accent}" opacity="0.7"/>`;
-    paths += `<rect x="${cx - 22}" y="${cy - 3}" width="44" height="6" fill="${pal.accent}" opacity="0.7"/>`;
-  } else if (style === "warning") {
-    // Warning triangle
-    paths += `<polygon points="${cx},${cy - 90} ${cx - 78},${cy + 45} ${cx + 78},${cy + 45}" fill="${pal.primary}" opacity="0.9"/>`;
-    paths += `<polygon points="${cx},${cy - 55} ${cx - 48},${cy + 28} ${cx + 48},${cy + 28}" fill="#0a0118"/>`;
-    paths += `<text x="${cx}" y="${cy + 18}" text-anchor="middle" font-size="64" font-family="serif" fill="${pal.accent}" opacity="0.9">!</text>`;
-  } else {
-    // Generic star/cross
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      const r1 = 80, r2 = 38;
-      const x1 = cx + Math.cos(a) * r1, y1 = cy + Math.sin(a) * r1;
-      const a2 = a + Math.PI / 8;
-      const x2 = cx + Math.cos(a2) * r2, y2 = cy + Math.sin(a2) * r2;
-      if (i === 0) paths += `<polygon points="`;
-      paths += `${x1.toFixed(1)},${y1.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)} `;
-      if (i === 7) paths += `" fill="${pal.primary}" opacity="0.9"/>`;
-    }
-  }
-
-  // Moon crescent (top right)
-  if (hasMoon) {
-    paths += `<circle cx="${cx + 240}" cy="${cy - 240}" r="55" fill="${pal.accent}" opacity="0.7"/>`;
-    paths += `<circle cx="${cx + 258}" cy="${cy - 248}" r="44" fill="#0a0118"/>`;
-  }
-
-  // Decorative runes around the ring
-  if (hasRunes) {
-    const runeChars = ["⊕", "✦", "◈", "⟡", "⊗", "◉", "✧", "⬡"];
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * 360 * Math.PI / 180;
-      const rx = cx + Math.cos(angle) * (baseR - 30);
-      const ry = cy + Math.sin(angle) * (baseR - 30);
-      const char = runeChars[Math.floor(rng(i + 10) * runeChars.length)];
-      paths += `<text x="${rx.toFixed(1)}" y="${(ry + 8).toFixed(1)}" text-anchor="middle" font-size="22" fill="${pal.accent}" opacity="0.65" font-family="serif">${char}</text>`;
-    }
-  }
-
-  // Concept text at bottom (small)
-  const label = concept ? concept.slice(0, 24).toUpperCase() : "CELESTIAL YOKAI";
-  paths += `<text x="${cx}" y="${cy + baseR + 55}" text-anchor="middle" font-size="28" font-family="'Share Tech Mono', monospace" fill="${pal.accent}" opacity="0.55" letter-spacing="4">${label}</text>`;
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
-  <defs>
-    <filter id="glow">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" style="stop-color:#0a0118;stop-opacity:1"/>
-      <stop offset="100%" style="stop-color:#030108;stop-opacity:1"/>
-    </radialGradient>
-  </defs>
-  <!-- Background -->
-  <rect width="1200" height="1200" fill="url(#bgGrad)"/>
-  <!-- Glow layer -->
-  <g filter="url(#glow)" opacity="0.6">
-    <circle cx="${cx}" cy="${cy}" r="${baseR * 0.55}" fill="${pal.glow}"/>
-  </g>
-  <!-- Main artwork -->
-  ${paths}
-</svg>`;
+function makeSigil(concept="", style="sigil") {
+  const seed = concept.split("").reduce((a,c)=>a+c.charCodeAt(0),0);
+  const rng  = n=>(((seed*9301+n*49297)%233280)/233280);
+  const PAL  = {sigil:{p:"#c084fc",s:"#9b5cf6",a:"#e8c97a",g:"rgba(192,132,252,0.6)"},seal:{p:"#e8c97a",s:"#b45309",a:"#c084fc",g:"rgba(232,201,122,0.6)"},emblem:{p:"#67e8f9",s:"#0e7490",a:"#9b5cf6",g:"rgba(103,232,249,0.6)"},warning:{p:"#ff6b6b",s:"#c41e3a",a:"#e8c97a",g:"rgba(255,107,107,0.6)"},kitsari:{p:"#c084fc",s:"#e8c97a",a:"#ffffff",g:"rgba(192,132,252,0.7)"},faction:{p:"#4ade80",s:"#166534",a:"#e8c97a",g:"rgba(74,222,128,0.6)"}};
+  const pal  = PAL[style]||PAL.sigil;
+  const cx=600,cy=600,R=420;
+  let paths="";
+  paths+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${pal.p}" stroke-width="3" opacity="0.9"/>`;
+  paths+=`<circle cx="${cx}" cy="${cy}" r="${R+8}" fill="none" stroke="${pal.p}" stroke-width="1" opacity="0.3"/>`;
+  for(let r=1;r<=3;r++){const rd=R*(0.75-r*0.15);paths+=`<circle cx="${cx}" cy="${cy}" r="${rd}" fill="none" stroke="${pal.s}" stroke-width="${2-r*0.3}" opacity="${0.7-r*0.1}"/>`;}
+  const petals=6+Math.floor(rng(2)*6),rot=rng(3)*360;
+  for(let i=0;i<petals;i++){const a=(i/petals*360+rot)*Math.PI/180,x1=cx+Math.cos(a)*R*0.25,y1=cy+Math.sin(a)*R*0.25,x2=cx+Math.cos(a)*R*0.92,y2=cy+Math.sin(a)*R*0.92;paths+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${pal.a}" stroke-width="1.5" opacity="0.6"/>`;}
+  if(style==="kitsari"||style==="sigil"){paths+=`<ellipse cx="${cx}" cy="${cy}" rx="90" ry="50" fill="${pal.p}" opacity="0.9"/><ellipse cx="${cx}" cy="${cy}" rx="50" ry="46" fill="#0a0118"/><circle cx="${cx+12}" cy="${cy-8}" r="10" fill="${pal.a}" opacity="0.9"/>`;}
+  else if(style==="warning"){paths+=`<polygon points="${cx},${cy-90} ${cx-78},${cy+45} ${cx+78},${cy+45}" fill="${pal.p}" opacity="0.9"/><polygon points="${cx},${cy-55} ${cx-48},${cy+28} ${cx+48},${cy+28}" fill="#0a0118"/><text x="${cx}" y="${cy+18}" text-anchor="middle" font-size="64" font-family="serif" fill="${pal.a}" opacity="0.9">!</text>`;}
+  else{paths+=`<rect x="${cx-45}" y="${cy-60}" width="90" height="120" rx="12" fill="${pal.p}" opacity="0.85"/><rect x="${cx-30}" y="${cy-42}" width="60" height="84" rx="6" fill="#0a0118"/><rect x="${cx-3}" y="${cy-22}" width="6" height="44" fill="${pal.a}" opacity="0.7"/><rect x="${cx-22}" y="${cy-3}" width="44" height="6" fill="${pal.a}" opacity="0.7"/>`;}
+  const label=(concept||"CELESTIAL YOKAI").slice(0,24).toUpperCase();
+  paths+=`<text x="${cx}" y="${cy+R+55}" text-anchor="middle" font-size="28" font-family="monospace" fill="${pal.a}" opacity="0.55" letter-spacing="4">${label}</text>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200"><defs><filter id="glow"><feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter><radialGradient id="bg" cx="50%" cy="50%" r="50%"><stop offset="0%" style="stop-color:#0a0118"/><stop offset="100%" style="stop-color:#030108"/></radialGradient></defs><rect width="1200" height="1200" fill="url(#bg)"/><g filter="url(#glow)" opacity="0.6"><circle cx="${cx}" cy="${cy}" r="${R*0.55}" fill="${pal.g}"/></g>${paths}</svg>`;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// KITSARI AI COMMERCE ROUTES
+// AI COMMERCE ROUTES
 // ════════════════════════════════════════════════════════════════════════════
 
 app.post("/api/agent/kitsari", async (req, res) => {
-  const { command } = req.body;
-  if (!command?.trim()) return res.status(400).json({ error: "Command required." });
-  try { res.json({ agent: "kitsari", response: await askKitsari(command.trim()) }); }
-  catch (err) { res.status(500).json({ error: "Transmission failed." }); }
+  const {command} = req.body;
+  if (!command?.trim()) return res.status(400).json({error:"Command required."});
+  try { res.json({agent:"kitsari",response:await ask(command.trim())}); }
+  catch(e) { res.status(500).json({error:"Transmission failed."}); }
 });
 
 app.post("/api/commerce/generate-product", async (req, res) => {
-  const { productType = "sticker", theme, stickerStyle, nftAngle } = req.body;
-  const typeContext = productType === "sticker"
-    ? `PRODUCT TYPE: Kiss-cut vinyl sticker\nSTICKER STYLE: ${stickerStyle || "sigil / emblem"}\nFormat: die-cut, suitable for laptop, bottle, journal, NFT merch pack.`
-    : productType === "poster"
-    ? `PRODUCT TYPE: Art print / poster\nFormat: vertical or square, wall art, collectible.`
-    : `PRODUCT TYPE: T-shirt\nFormat: unisex front print, collector appeal.`;
-
-  const prompt = `Generate a complete Celestial Yokai product draft.
-
-${typeContext}
-THEME: ${theme || "Kitsari / Lantern District / celestial fox sigil"}
-NFT UTILITY: ${nftAngle || "holder-only variant or faction decal"}
-
-Generate EXACTLY this structure:
-
-## PRODUCT NAME
-Evocative brand name.
-
-## LORE ANGLE
-2-3 sentences of in-universe lore.
-
-## TARGET BUYER
-Specific buyer profile.
-
-## ETSY SEO TITLE
-Max 140 chars. Front-load keywords. End with "Celestial Yokai" or "Lantern District".
-
-## DESCRIPTION
-180-250 words. Hook, lore tie-in, product details, material placeholder, care note.
-
-## 13 ETSY TAGS
-tag one, tag two, tag three, tag four, tag five, tag six, tag seven, tag eight, tag nine, tag ten, tag eleven, tag twelve, tag thirteen
-
-## PRICING SUGGESTION
-Retail price with reasoning. NFT holder discount.
-
-## PRINTIFY PRODUCT MATCH
-Exact Printify product category.
-
-## MOCKUP ART DIRECTION
-2-3 sentences on staging for maximum Etsy conversion.
-
-## X LAUNCH POST
-Max 280 chars, hook-first, 2-3 hashtags.
-
-## NFT HOLDER UTILITY
-Specific benefit: trait variant, holder discount, early access, or secret page.
-
-All content must be original Celestial Yokai IP.`;
-
-  try {
-    const aiDraft = await askKitsari(prompt, 2200);
-    res.json({ response: aiDraft, productType, status: "ai_draft", publishLocked: true });
-  } catch (err) { console.error("[AI] generate-product:", err.message); res.status(500).json({ error: "Draft generation failed." }); }
+  const {productType="sticker",theme,stickerStyle,nftAngle} = req.body;
+  const ctx = productType==="sticker"?`PRODUCT TYPE: Kiss-cut vinyl sticker\nSTICKER STYLE: ${stickerStyle||"sigil"}\nFormat: die-cut.`:productType==="poster"?`PRODUCT TYPE: Art print/poster.`:`PRODUCT TYPE: T-shirt.`;
+  const prompt = `Generate a complete Celestial Yokai product draft.\n${ctx}\nTHEME: ${theme||"Kitsari/Lantern District"}\nNFT UTILITY: ${nftAngle||"holder variant"}\n\nGenerate:\n## PRODUCT NAME\n## LORE ANGLE\n## TARGET BUYER\n## ETSY SEO TITLE\n## DESCRIPTION\n## 13 ETSY TAGS\n## PRICING SUGGESTION\n## PRINTIFY PRODUCT MATCH\n## MOCKUP ART DIRECTION\n## X LAUNCH POST\n## NFT HOLDER UTILITY`;
+  try { res.json({response:await ask(prompt,2200),productType,status:"ai_draft",publishLocked:true}); }
+  catch(e) { res.status(500).json({error:"Draft generation failed."}); }
 });
 
 app.post("/api/commerce/product-idea", async (req, res) => {
-  const { niche, medium } = req.body;
-  const prompt = `Generate 3 original Celestial Yokai product ideas.
-Theme: ${niche || "celestial yokai, mystical anime, dark cosmic"}
-Type: ${medium || "sticker, poster, or shirt"}
-For EACH: Product Name, Product Type, Design Concept (2-3 sentences), Target Buyer, Retail Price, Printify Blueprint, NFT Utility.
-Separate with ---. Original IP only.`;
-  try { res.json({ response: await askKitsari(prompt, 1800) }); }
-  catch (err) { res.status(500).json({ error: "Market spirits unavailable." }); }
+  const {niche,medium} = req.body;
+  try { res.json({response:await ask(`Generate 3 original Celestial Yokai product ideas.\nTheme: ${niche||"celestial yokai"}\nType: ${medium||"sticker, poster, shirt"}\nFor EACH: Name, Type, Design (2-3 sentences), Buyer, Price, Blueprint, NFT Utility.\nSeparate with ---. Original IP only.`,1800)}); }
+  catch(e) { res.status(500).json({error:"Market spirits unavailable."}); }
 });
 
 app.post("/api/commerce/launch-post", async (req, res) => {
-  const { productName, platform, tone, dropDate } = req.body;
-  if (!productName) return res.status(400).json({ error: "Product name required." });
-  const prompt = `Write a complete social launch package for: ${productName}
-Platform: ${platform || "X (Twitter) and Instagram"}
-Tone: ${tone || "mystical, hype, community-first"}
-Timing: ${dropDate || "now live"}
-
-## X LAUNCH POST
-Max 280 chars, hook-first, 2-3 hashtags.
-## X THREAD (3 posts)
-Post 1: lore | Post 2: product details | Post 3: CTA
-## INSTAGRAM CAPTION
-150-200 words, 15 hashtags at end.
-## 5-DAY DROP SEQUENCE
-One beat per day.
-## NFT HOLDER EXCLUSIVE
-Post for holders only.`;
-  try { res.json({ response: await askKitsari(prompt, 2000) }); }
-  catch (err) { res.status(500).json({ error: "Signal lost." }); }
+  const {productName,platform,tone,dropDate} = req.body;
+  if (!productName) return res.status(400).json({error:"Product name required."});
+  try { res.json({response:await ask(`Write a social launch package for: ${productName}\nPlatform: ${platform||"X and Instagram"}\nTone: ${tone||"mystical, hype"}\nTiming: ${dropDate||"now live"}\n\n## X LAUNCH POST\n## X THREAD (3 posts)\n## INSTAGRAM CAPTION\n## 5-DAY DROP SEQUENCE\n## NFT HOLDER EXCLUSIVE`,2000)}); }
+  catch(e) { res.status(500).json({error:"Signal lost."}); }
 });
 
 app.post("/api/commerce/lore-content", async (req, res) => {
-  const { topic, platform } = req.body;
-  const prompt = `Write lore content for the Celestial Yokai universe.
-Topic: ${topic || "Kitsari and the Lantern District Market"}
-Platform: ${platform || "X / Twitter"}
-## LORE POST
-## LORE THREAD (3 posts)
-## ENGAGEMENT HOOK
-## CAMPAIGN ANGLE`;
-  try { res.json({ response: await askKitsari(prompt, 1500) }); }
-  catch (err) { res.status(500).json({ error: "Lore keeper unavailable." }); }
+  const {topic,platform} = req.body;
+  try { res.json({response:await ask(`Write lore content for Celestial Yokai universe.\nTopic: ${topic||"Kitsari/Lantern District"}\nPlatform: ${platform||"X"}\n## LORE POST\n## LORE THREAD\n## ENGAGEMENT HOOK\n## CAMPAIGN ANGLE`,1500)}); }
+  catch(e) { res.status(500).json({error:"Lore unavailable."}); }
 });
 
 app.post("/api/commerce/market-scan", async (req, res) => {
-  const { category, priceRange } = req.body;
-  const prompt = `Analyze market signals for the Celestial Night Market.
-Category: ${category || "mystical anime stickers, celestial yokai merch"}
-Price: ${priceRange || "$5-$30"}
-## MARKET SIGNAL REPORT
-## CONTENT GAP
-## TOP 3 PRODUCT OPPORTUNITIES
-## ETSY SEO KEYWORDS (15)
-## NFT CROSSOVER ANGLE
-Analyze trends only. Never copy specific sellers.`;
-  try { res.json({ response: await askKitsari(prompt, 1800) }); }
-  catch (err) { res.status(500).json({ error: "Market scan failed." }); }
+  const {category,priceRange} = req.body;
+  try { res.json({response:await ask(`Market signals for Celestial Night Market.\nCategory: ${category||"mystical anime stickers"}\nPrice: ${priceRange||"$5-$30"}\n## MARKET SIGNAL REPORT\n## CONTENT GAP\n## TOP 3 OPPORTUNITIES\n## ETSY SEO KEYWORDS (15)\n## NFT CROSSOVER ANGLE\nAnalyze trends only. Never copy sellers.`,1800)}); }
+  catch(e) { res.status(500).json({error:"Market scan failed."}); }
 });
 
 app.get("/api/ledger/snapshot", async (req, res) => {
-  if (!etsyStore.accessToken || !etsyStore.shopId) {
-    return res.json({ connected: false, message: "Connect Etsy to populate the Lunar Ledger." });
-  }
+  if (!etsyStore.accessToken||!etsyStore.shopId) return res.json({connected:false,message:"Connect Etsy to populate Lunar Ledger."});
   try {
-    const [shopR, draftR] = await Promise.allSettled([
-      etsyFetch(`/application/shops/${etsyStore.shopId}`),
-      etsyFetch(`/application/shops/${etsyStore.shopId}/listings?state=draft&limit=100`),
-    ]);
-    const shop   = shopR.status  === "fulfilled" ? shopR.value  : null;
-    const drafts = draftR.status === "fulfilled" ? draftR.value : null;
-    res.json({
-      connected: true, shopName: etsyStore.shopName, shopId: etsyStore.shopId, connectedAt: etsyStore.connectedAt,
-      favorites: shop?.num_favorers ?? "—", orders: shop?.transaction_sold_count ?? "—",
-      listingCount: shop?.listing_active_count ?? "—", draftCount: drafts?.count ?? 0,
-      currency: shop?.currency_code ?? "USD",
-    });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const [sR,dR] = await Promise.allSettled([etsyFetch(`/application/shops/${etsyStore.shopId}`),etsyFetch(`/application/shops/${etsyStore.shopId}/listings?state=draft&limit=100`)]);
+    const sh=sR.status==="fulfilled"?sR.value:null, dr=dR.status==="fulfilled"?dR.value:null;
+    res.json({connected:true,shopName:etsyStore.shopName,shopId:etsyStore.shopId,connectedAt:etsyStore.connectedAt,favorites:sh?.num_favorers??"—",orders:sh?.transaction_sold_count??"—",listingCount:sh?.listing_active_count??"—",draftCount:dr?.count??0,currency:sh?.currency_code??"USD"});
+  } catch(e) { res.status(500).json({error:e.message}); }
 });
 
-app.get("/health", (req, res) => res.json({
-  status: "online", console: "Kitsari Commerce Console v2",
-  etsy: etsyStore.accessToken ? "connected" : "disconnected",
-  printify: PRINTIFY_KEY ? "configured" : "unconfigured",
-}));
+app.get("/health", (req, res) => res.json({status:"online",etsy:etsyStore.accessToken?"connected":"disconnected",printify:PRINTIFY_KEY?"configured":"unconfigured"}));
 
-// ── Static files + SPA fallback — MUST be after all /api routes ──────────
+// ── 3. STATIC FILES — after ALL API routes ────────────────────────────────────
 app.use(express.static(path.join(__dirname, "public")));
+
+// ── 4. SPA FALLBACK — after static ───────────────────────────────────────────
 app.get("*", (req, res) => {
-  if (req.path.startsWith("/api/")) {
-    return res.status(404).json({ error: "API route not found", path: req.path });
-  }
-  res.sendFile(INDEX_HTML);
+  if (req.path.startsWith("/api/")) return res.status(404).json({error:"API route not found",path:req.path});
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// ── 5. LISTEN ─────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n✦ Kitsari Commerce Console v2 — port ${PORT}`);
-  console.log(`✦ Etsy:     ${ETSY_API_KEY ? "credentials set" : "NOT CONFIGURED"}`);
-  console.log(`✦ Printify: ${PRINTIFY_KEY ? "KEY SET" : "not configured"}`);
-  console.log(`✦ Redirect: ${ETSY_REDIRECT || "not set"}\n`);
+  console.log(`\n✦ Kitsari Commerce Console — port ${PORT}`);
+  console.log(`✦ Etsy:     ${ETSY_API_KEY?"credentials set":"NOT CONFIGURED"}`);
+  console.log(`✦ Printify: ${PRINTIFY_KEY?"KEY SET":"not configured"}`);
+  console.log(`✦ Redirect: ${ETSY_REDIRECT||"not set"}\n`);
+  console.log("Route order: json → api routes → static → spa fallback");
 });
