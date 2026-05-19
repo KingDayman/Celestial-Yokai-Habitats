@@ -182,52 +182,27 @@ app.get("/api/etsy/debug", (req, res) => res.json({
 
 app.get("/api/etsy/connect", (req, res) => {
   console.log("✅ /api/etsy/connect HIT");
-
-  if (!ETSY_API_KEY) {
-    return res.status(500).json({ error: "Missing ETSY_API_KEY" });
-  }
-  if (!ETSY_REDIRECT) {
-    return res.status(500).json({ error: "Missing ETSY_REDIRECT_URI" });
-  }
+  if (!ETSY_API_KEY) return res.status(500).json({ error: "Missing ETSY_API_KEY — add to Railway env vars" });
+  if (!ETSY_REDIRECT) return res.status(500).json({ error: "Missing ETSY_REDIRECT_URI — add to Railway env vars" });
 
   const state = b64url(crypto.randomBytes(16));
   const ver   = makeVerifier();
-  etsyStore.state = state;
+  etsyStore.state        = state;
   etsyStore.codeVerifier = ver;
 
   const params = new URLSearchParams({
-    response_type: "code",
-    redirect_uri: ETSY_REDIRECT,
-    scope: "listings_r listings_w shops_r transactions_r",
-    client_id: ETSY_API_KEY,
+    response_type:         "code",
+    redirect_uri:          ETSY_REDIRECT,
+    scope:                 "listings_r listings_w shops_r transactions_r",
+    client_id:             ETSY_API_KEY,
     state,
-    code_challenge: makeChallenge(ver),
+    code_challenge:        makeChallenge(ver),
     code_challenge_method: "S256",
   });
-  const url = "https://www.etsy.com/oauth/connect?" + params.toString();
-  console.log("[Etsy] auth URL:", url);
 
-  // Return an HTML page that navigates itself — handles Safari redirect issues
-  res.setHeader("Content-Type", "text/html");
-  res.send(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta http-equiv="refresh" content="0;url=${url}">
-  <title>Connecting to Etsy...</title>
-  <style>
-    body { background: #030108; color: #e8c97a; font-family: monospace;
-           display: flex; flex-direction: column; align-items: center;
-           justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 2rem; }
-    a { color: #c084fc; font-size: 1.1rem; margin-top: 1rem; display: block; }
-  </style>
-</head>
-<body>
-  <p>✦ Connecting to Etsy...</p>
-  <a href="${url}">Tap here if not redirected automatically</a>
-  <script>window.location.replace("${url}");</script>
-</body>
-</html>`);
+  const authUrl = "https://www.etsy.com/oauth/connect?" + params.toString();
+  console.log("[Etsy] Redirecting — redirect_uri=" + ETSY_REDIRECT);
+  res.redirect(authUrl);
 });
 
 app.get("/api/etsy/callback", async (req, res) => {
