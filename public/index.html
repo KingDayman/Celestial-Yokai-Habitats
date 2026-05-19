@@ -395,7 +395,7 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
       <div class="wizard-steps">
         <div class="wstep active" id="ws-1"><span class="wstep-num">①</span>CONCEPT</div>
         <div class="wstep" id="ws-2"><span class="wstep-num">②</span>CATALOG</div>
-        <div class="wstep" id="ws-3"><span class="wstep-num">③</span>PROVIDER</div>
+        <div class="wstep" id="ws-3"><span class="wstep-num">③</span>ARTWORK</div>
         <div class="wstep" id="ws-4"><span class="wstep-num">④</span>CREATE</div>
         <div class="wstep" id="ws-5"><span class="wstep-num">⑤</span>SYNC</div>
       </div>
@@ -518,9 +518,37 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
           </div>
           <div id="provider-alt-list" style="font-family:var(--fm);font-size:.48rem;color:var(--muted);margin-top:.4rem;line-height:1.6"></div>
         </div>
+
+        <!-- ARTWORK UPLOAD -->
+        <div id="artwork-upload-section" style="display:none;margin-top:.85rem">
+          <p class="f-lbl" style="color:var(--gold);margin-bottom:.55rem">UPLOAD ARTWORK TO PRINTIFY</p>
+          <div class="f-group" style="margin-bottom:.55rem">
+            <label class="f-lbl">IMAGE URL (public PNG/JPG/SVG link)</label>
+            <input type="url" class="f-input" id="artwork-url-input" placeholder="https://... — leave blank to use a test placeholder"/>
+          </div>
+          <div class="f-group" style="margin-bottom:.7rem">
+            <label class="f-lbl">OR UPLOAD IMAGE FILE</label>
+            <input type="file" id="artwork-file-input" accept="image/png,image/jpeg,image/svg+xml,image/gif" style="width:100%;background:rgba(0,0,0,.45);border:1px solid var(--borderdim);border-radius:var(--r);color:var(--text);font-family:var(--fm);font-size:.72rem;padding:.4rem .65rem;cursor:pointer"/>
+          </div>
+          <button id="upload-btn" class="btn-send" onclick="runUpload()" style="width:100%;justify-content:center;margin-bottom:.65rem">
+            🖼️ UPLOAD ARTWORK TO PRINTIFY ✦
+          </button>
+          <div class="loading" id="upload-loading" style="display:none">
+            <div class="orbs"><div class="orb g"></div><div class="orb g"></div><div class="orb g"></div></div>
+            <span class="load-txt" id="upload-load-txt">Uploading to Printify...</span>
+          </div>
+          <div id="upload-result" style="display:none">
+            <div class="provider-box" style="border-color:rgba(74,222,128,.28)">
+              <div class="pb-row"><span class="pb-label" style="color:var(--green)">ARTWORK UPLOADED ✓</span><span class="pb-value" style="color:var(--green)" id="upload-image-id">—</span></div>
+              <div class="pb-row" style="margin-top:.22rem"><span class="pb-label">PRINTIFY PREVIEW</span><a id="upload-preview-link" href="#" target="_blank" style="font-family:var(--fm);font-size:.5rem;color:var(--teal);letter-spacing:.06em">view ↗</a></div>
+            </div>
+          </div>
+          <div class="err-box" id="upload-err"></div>
+        </div>
+
         <div class="btn-row">
           <button class="btn-act" onclick="goStage(2)">← BACK</button>
-          <button class="btn-send" id="stage3-btn" onclick="runStage3()" disabled>CREATE PRINTIFY DRAFT ✦</button>
+          <button class="btn-send gold" id="stage3-btn" onclick="runStage3()" disabled>CREATE PRINTIFY DRAFT ✦</button>
         </div>
         <div class="err-box" id="stage3-err"></div>
       </div>
@@ -570,10 +598,11 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
         </div>
         <div class="sync-strip" id="sync-strip">
           <div class="sync-step" id="ss-ai"><span class="sdot"></span>AI Draft</div>
-          <div class="sync-step" id="ss-catalog"><span class="sdot"></span>Catalog Resolved</div>
-          <div class="sync-step" id="ss-provider"><span class="sdot"></span>Provider Selected</div>
-          <div class="sync-step" id="ss-printify"><span class="sdot"></span>Printify Product</div>
-          <div class="sync-step" id="ss-etsy"><span class="sdot"></span>Etsy Draft Listing</div>
+          <div class="sync-step" id="ss-catalog"><span class="sdot"></span>Catalog</div>
+          <div class="sync-step" id="ss-provider"><span class="sdot"></span>Provider</div>
+          <div class="sync-step" id="ss-upload"><span class="sdot"></span>Artwork</div>
+          <div class="sync-step" id="ss-printify"><span class="sdot"></span>Printify</div>
+          <div class="sync-step" id="ss-etsy"><span class="sdot"></span>Etsy Draft</div>
         </div>
         <div class="pub-lock">Autonomous publishing is locked until draft quality, Etsy compliance, and Printify sync are verified.</div>
         <div class="btn-row" style="margin-top:.7rem">
@@ -898,18 +927,20 @@ function setSyncStep(id,state,label){
   el.innerHTML='<span class="sdot"></span>'+label;
 }
 function resetWizard(){
-  wizardState={aiDraft:'',productType:'',blueprintId:null,blueprintTitle:'',providerId:null,providerName:'',providerLocation:'',providerScore:0,variantId:null,variantTitle:'',printifyProductId:null,etsyListingId:null,etsyUrl:null};
+  wizardState={aiDraft:'',productType:'',blueprintId:null,blueprintTitle:'',providerId:null,providerName:'',providerLocation:'',providerScore:0,variantId:null,variantTitle:'',printifyImageId:null,printifyProductId:null,etsyListingId:null,etsyUrl:null};
   goStage(1);
   document.getElementById('gp-concept').value='';
   document.getElementById('gp-buyer').value='';
   document.getElementById('gp-nft').value='';
   document.getElementById('draft-body').innerHTML='';
   document.getElementById('success-banner').style.display='none';
-  hideEl('catalog-result');hideEl('provider-result');hideEl('printify-result');
+  hideEl('catalog-result');hideEl('provider-result');hideEl('printify-result');hideEl('artwork-upload-section');hideEl('upload-result');
   ['stage1-err','stage2-err','stage3-err','stage4-err','stage5-err'].forEach(hideEl);
-  ['ss-ai','ss-catalog','ss-provider','ss-printify','ss-etsy'].forEach(id=>setSyncStep(id,'','—'));
+  ['ss-ai','ss-catalog','ss-provider','ss-upload','ss-printify','ss-etsy'].forEach(id=>setSyncStep(id,'','—'));
   document.getElementById('stage2-btn').disabled=true;
   document.getElementById('stage3-btn').disabled=true;
+  if(document.getElementById('upload-btn'))document.getElementById('upload-btn').disabled=false;
+  if(document.getElementById('artwork-url-input'))document.getElementById('artwork-url-input').value='';
   document.getElementById('stage4-btn').disabled=true;
 }
 
@@ -1047,8 +1078,9 @@ async function fetchProviderAndAdvance(){
       document.getElementById('provider-alt-list').innerHTML=altHtml;
     }
     showEl('provider-result');
+    showEl('artwork-upload-section');
     goStage(3);
-    document.getElementById('stage3-btn').disabled=false;
+    document.getElementById('stage3-btn').disabled=true;  // locked until art uploaded
     habFlash('teal');
   }catch(e){
     console.error('[Stage2 fetchProvider]',e.message);
@@ -1060,8 +1092,54 @@ async function fetchProviderAndAdvance(){
   }
 }
 
+/* ── ARTWORK UPLOAD ─────────────────────────────────────── */
+async function runUpload(){
+  hideEl('upload-err');
+  const urlInput=(document.getElementById('artwork-url-input')||{}).value||'';
+  const fileInput=document.getElementById('artwork-file-input');
+  const hasFile=fileInput&&fileInput.files&&fileInput.files.length>0;
+  let payload;
+  if(hasFile){
+    const file=fileInput.files[0];
+    const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+    payload={imageBase64:b64,mimeType:file.type||'image/png'};
+    console.log('[Upload] Using file: '+file.name);
+  } else if(urlInput.trim()){
+    payload={imageUrl:urlInput.trim()};
+    console.log('[Upload] Using URL: '+urlInput.trim());
+  } else {
+    // Public domain test image Printify can reliably fetch
+    payload={imageUrl:'https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?w=800&q=80'};
+    console.log('[Upload] No input — using test placeholder image');
+  }
+  showLoading('upload-loading',true,'Uploading artwork to Printify...');
+  disableBtn('upload-btn',true,'UPLOADING...');
+  habFlash('teal');
+  try{
+    const r=await fetch('/api/printify/upload-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Upload failed');
+    wizardState.printifyImageId=d.imageId;
+    console.log('[Upload] SUCCESS — imageId='+d.imageId);
+    setEl('upload-image-id',d.imageId);
+    const pl=document.getElementById('upload-preview-link');
+    if(d.previewUrl&&pl){pl.href=d.previewUrl;}else if(pl){pl.style.display='none';}
+    showEl('upload-result');
+    setSyncStep('ss-upload','done','Artwork uploaded ✓ id='+d.imageId);
+    document.getElementById('stage3-btn').disabled=false;
+    habFlash('gold');
+  }catch(e){
+    console.error('[Upload]',e.message);
+    showErr('upload-err','Upload failed: '+e.message);
+    disableBtn('upload-btn',false,'🖼️ RETRY UPLOAD ✦');
+  }finally{
+    showLoading('upload-loading',false);
+  }
+}
+
 /* ── STAGE 3: CREATE PRINTIFY PRODUCT ──────────────────── */
 async function runStage3(){
+  if(!wizardState.printifyImageId){showErr('stage3-err','Upload artwork first.');return;}
   showLoading('stage3-loading',true);
   disableBtn('stage3-btn',true,'CREATING...');
   hideEl('stage3-err');hideEl('printify-result');
@@ -1081,6 +1159,7 @@ async function runStage3(){
         blueprintId:wizardState.blueprintId,
         printProviderId:wizardState.providerId,
         variantId:wizardState.variantId,
+        printifyImageId:wizardState.printifyImageId,
       }),
     });
     const d=await r.json();
