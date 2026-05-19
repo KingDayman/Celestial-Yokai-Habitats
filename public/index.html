@@ -343,7 +343,7 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
       <span id="printify-shop-name" style="font-family:var(--fm);font-size:.5rem;color:var(--teal);display:none"></span>
     </div>
     <div class="cb-right">
-      <button class="cb-btn" id="etsy-conn-btn" onclick="connectEtsy()">CONNECT ETSY</button>
+      <a href="/api/etsy/connect" class="cb-btn" id="etsy-conn-btn" style="text-decoration:none;display:inline-block">CONNECT ETSY</a>
       <button class="cb-btn" id="etsy-disc-btn" onclick="disconnectEtsy()" style="display:none;border-color:rgba(255,107,107,.3);color:var(--red)">DISCONNECT</button>
     </div>
   </div>
@@ -745,7 +745,7 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
       <div class="empty-icon">🏮</div>
       <div class="empty-title">Lantern District Market Offline</div>
       <div class="empty-txt">No market signals detected yet.<br>Connect your Etsy shop to activate the Lunar Ledger.</div>
-      <button class="cb-btn" style="margin-top:.8rem" onclick="connectEtsy()">CONNECT ETSY SHOP</button>
+      <a href="/api/etsy/connect" class="cb-btn" style="margin-top:.8rem;text-decoration:none;display:inline-block">CONNECT ETSY SHOP</a>
     </div>
     <div id="ledger-live" style="display:none">
       <p class="slbl">✦ ETSY PERFORMANCE</p>
@@ -917,9 +917,8 @@ async function checkPrintify(){
 }
 
 function connectEtsy(){
-  console.log('[Etsy] Connect Etsy button clicked — hard navigating to /api/etsy/connect');
-  // Hard navigation — not fetch, not AJAX
-  window.location.assign('/api/etsy/connect');
+  console.log('[Etsy] connectEtsy() called — navigating to /api/etsy/connect');
+  window.location.href = '/api/etsy/connect';
 }
 function disconnectEtsy(){
   if(!confirm('Disconnect Etsy from the Lantern District Market?'))return;
