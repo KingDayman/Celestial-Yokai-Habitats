@@ -776,7 +776,7 @@ function enterRealm(){} // gate removed
 function boot(){
   initBg();initFx();initHabitat();initClock();
   // checkAllConnections first, then handle OAuth redirect so status is fresh
-  checkAllConnections().then(()=>handleOAuthReturn()).catch(()=>handleOAuthReturn());
+  checkAllConnections().then(()=>handleOAuthReturn());
 }
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',boot);}else{boot();}
 
@@ -819,76 +819,103 @@ function switchTab(name,tab){
 
 /* ── CONNECTIONS ───────────────────────────────────────── */
 let etsyConnected=false,printifyConnected=false;
-async function checkAllConnections(){await Promise.all([checkEtsy(),checkPrintify()]);}
+
+// Always resolves — never rejects. Errors are isolated per-service.
+async function checkAllConnections(){
+  await Promise.allSettled([checkEtsy(),checkPrintify()]);
+}
+
+// Helper: fetch with 8-second timeout so we never hang on "CHECKING"
+function fetchWithTimeout(url,ms){
+  return Promise.race([
+    fetch(url),
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout after '+ms+'ms')),ms))
+  ]);
+}
+
+function setPill(id,cls,label){
+  const el=document.getElementById(id);
+  if(el){el.className='pill '+cls;el.innerHTML='<span class="pdot"></span>'+label;}
+}
+function setElSafe(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
+function showElSafe(id,show){const el=document.getElementById(id);if(el)el.style.display=show?'inline':'none';}
 
 async function checkEtsy(){
+  console.log('[Etsy] Checking Etsy status...');
   try{
-    const resp=await fetch('/api/etsy/status');
+    const resp=await fetchWithTimeout('/api/etsy/status',8000);
     const d=await resp.json();
-    const pill=document.getElementById('etsy-pill');
-    const connBtn=document.getElementById('etsy-conn-btn');
-    const discBtn=document.getElementById('etsy-disc-btn');
-    const nameEl=document.getElementById('etsy-shop-name');
-    const healthPill=document.getElementById('health-etsy-pill');
-    const healthDetail=document.getElementById('health-etsy-detail');
+    console.log('[Etsy] Status result:',JSON.stringify(d));
     if(d.connected){
       etsyConnected=true;
-      pill.className='pill ok';
-      pill.innerHTML='<span class="pdot"></span>CONNECTED';
-      if(d.shopName){nameEl.textContent='// '+d.shopName;nameEl.style.display='inline';}
-      if(connBtn)connBtn.style.display='none';
-      if(discBtn)discBtn.style.display='inline-block';
-      if(healthPill){healthPill.className='pill ok';healthPill.innerHTML='<span class="pdot"></span>CONNECTED';}
-      if(healthDetail)healthDetail.textContent=d.shopName||'Connected';
+      setPill('etsy-pill','ok','CONNECTED');
+      setPill('health-etsy-pill','ok','CONNECTED');
+      if(d.shopName){
+        const nm=document.getElementById('etsy-shop-name');
+        if(nm){nm.textContent='// '+d.shopName;nm.style.display='inline';}
+      }
+      const cb=document.getElementById('etsy-conn-btn');if(cb)cb.style.display='none';
+      const db=document.getElementById('etsy-disc-btn');if(db)db.style.display='inline-block';
+      setElSafe('health-etsy-detail',d.shopName||'Connected');
     } else {
       etsyConnected=false;
-      const isUnconfigured=d.status==='unconfigured';
-      pill.className='pill '+(isUnconfigured?'dim':'bad');
-      pill.innerHTML='<span class="pdot"></span>'+(isUnconfigured?'NOT CONFIGURED':d.message||'DISCONNECTED — RECONNECT REQUIRED');
-      if(connBtn){connBtn.style.display='inline-block';connBtn.disabled=isUnconfigured;}
-      if(discBtn)discBtn.style.display='none';
-      if(healthPill){healthPill.className='pill bad';healthPill.innerHTML='<span class="pdot"></span>OFFLINE';}
-      if(healthDetail)healthDetail.textContent=d.message||'Etsy disconnected — reconnect required.';
+      const isNoCreds=d.status==='unconfigured';
+      setPill('etsy-pill',isNoCreds?'dim':'bad',isNoCreds?'NOT CONFIGURED':'DISCONNECTED');
+      setPill('health-etsy-pill','bad','OFFLINE');
+      setElSafe('health-etsy-detail',d.message||'Reconnect required');
+      const cb=document.getElementById('etsy-conn-btn');
+      if(cb){cb.style.display='inline-block';cb.disabled=isNoCreds;}
+      const db=document.getElementById('etsy-disc-btn');if(db)db.style.display='none';
     }
   }catch(e){
-    // Network/parse error — don't crash the rest of the app
-    console.warn('[Etsy] Status check failed:',e.message);
+    console.warn('[Etsy] Status check error:',e.message);
     etsyConnected=false;
-    const pill=document.getElementById('etsy-pill');
-    if(pill){pill.className='pill bad';pill.innerHTML='<span class="pdot"></span>STATUS ERROR';}
+    setPill('etsy-pill','bad','CHECK FAILED');
+    setElSafe('health-etsy-detail','Status check failed — see console');
   }
 }
 
 async function checkPrintify(){
+  console.log('[Printify] Checking Printify status...');
   try{
-    const d=await(await fetch('/api/printify/status')).json();
-    const pill=document.getElementById('printify-pill');
-    const hp=document.getElementById('health-printify-pill');
-    const hd=document.getElementById('health-printify-detail');
-    const sn=document.getElementById('printify-shop-name');
-    const ls=document.getElementById('ls-printify');
+    const resp=await fetchWithTimeout('/api/printify/status',8000);
+    const d=await resp.json();
+    console.log('[Printify] Status result:',JSON.stringify(d));
     if(d.connected){
       printifyConnected=true;
-      pill.className='pill ok';pill.innerHTML='<span class="pdot"></span>CONNECTED';
-      hp.className='pill ok';hp.innerHTML='<span class="pdot"></span>CONNECTED';
-      const t=d.shops?.[0]?.title||'Active';
-      hd.textContent=d.shopCount+' shop(s) // '+t;
-      sn.textContent='// '+t;sn.style.display='inline';
-      if(ls)ls.textContent=d.shopCount+' shop';
-      activateStalls();
+      setPill('printify-pill','ok','CONNECTED');
+      setPill('health-printify-pill','ok','CONNECTED');
+      const shopTitle=d.shops&&d.shops[0]?d.shops[0].title:'Active';
+      setElSafe('health-printify-detail',(d.shopCount||1)+' shop(s) // '+shopTitle);
+      const sn=document.getElementById('printify-shop-name');
+      if(sn){sn.textContent='// '+shopTitle;sn.style.display='inline';}
+      setElSafe('ls-printify',(d.shopCount||1)+' shop');
+      if(typeof activateStalls==='function')activateStalls();
     } else {
       printifyConnected=false;
       const msg=d.message||'Offline';
-      const lbl=msg.includes('not set')?'NO KEY':'OFFLINE';
-      pill.className='pill bad';pill.innerHTML='<span class="pdot"></span>'+lbl;
-      hp.className='pill bad';hp.innerHTML='<span class="pdot"></span>'+lbl;
-      hd.textContent=msg;if(ls)ls.textContent='—';
+      const lbl=msg.toLowerCase().includes('not set')?'NO API KEY':'OFFLINE';
+      setPill('printify-pill','bad',lbl);
+      setPill('health-printify-pill','bad',lbl);
+      setElSafe('health-printify-detail',msg);
+      setElSafe('ls-printify','—');
     }
-  }catch(e){}
+  }catch(e){
+    console.warn('[Printify] Status check error:',e.message);
+    printifyConnected=false;
+    setPill('printify-pill','bad','CHECK FAILED');
+    setElSafe('health-printify-detail','Status check failed — see console');
+  }
 }
 
-function connectEtsy(){window.location.href='/api/etsy/connect';}
-function disconnectEtsy(){if(!confirm('Disconnect Etsy from the Lantern District Market?'))return;alert('Redeploy the Railway app to clear the server token.');}
+function connectEtsy(){
+  console.log('[Etsy] Connect Etsy clicked — navigating to /api/etsy/connect');
+  window.location.href='/api/etsy/connect';
+}
+function disconnectEtsy(){
+  if(!confirm('Disconnect Etsy from the Lantern District Market?'))return;
+  alert('Redeploy the Railway app or restart the server to clear the stored token.');
+}
 
 /* ── LEDGER ────────────────────────────────────────────── */
 async function loadLedger(){
