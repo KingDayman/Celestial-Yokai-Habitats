@@ -46,6 +46,18 @@ app.get("/api/debug/env", (req, res) => res.json({
   memoryNote:         "Token resets on every redeploy. Reconnect Etsy after each Railway deploy.",
 }));
 
+app.get("/api/debug/etsy-headers", (req, res) => {
+  // Shows first/last 4 chars only — safe to share, never exposes full secret
+  const mask = v => v ? v.slice(0,4) + "..." + v.slice(-4) + " (len=" + v.length + ")" : "NOT SET";
+  res.json({
+    ETSY_API_KEY_preview:      mask(ETSY_API_KEY),
+    ETSY_SHARED_SECRET_preview:mask(ETSY_SECRET),
+    etsyTokenPreview:          mask(etsyStore.accessToken),
+    hasAll:                    !!(ETSY_API_KEY && ETSY_SECRET && etsyStore.accessToken),
+    note: "x-api-key header uses ETSY_API_KEY (the keystring). ETSY_SHARED_SECRET is NOT used in request headers.",
+  });
+});
+
 app.get("/api/debug/routes", (req, res) => res.json({
   fileRunning:              "app.js",
   etsyConnectRouteExists:   true,
@@ -61,12 +73,30 @@ function makeChallenge(v){ return b64url(crypto.createHash("sha256").update(v).d
 
 // ── Etsy fetch ────────────────────────────────────────────────────────────────
 async function etsyFetch(ep, opts={}) {
-  if (!etsyStore.accessToken) throw new Error("Etsy not connected");
-  const r = await fetch(`https://openapi.etsy.com/v3${ep}`, {
+  if (!etsyStore.accessToken) throw new Error("Etsy not connected — reconnect via /api/etsy/connect");
+  if (!ETSY_API_KEY) throw new Error("ETSY_API_KEY not set in Railway env vars");
+  const r = await fetch("https://openapi.etsy.com/v3" + ep, {
     ...opts,
-    headers: { "x-api-key": ETSY_API_KEY, "Authorization": `Bearer ${etsyStore.accessToken}`, "Content-Type": "application/json", ...(opts.headers||{}) },
+    headers: {
+      "x-api-key":     ETSY_API_KEY,          // keystring only — NOT the shared secret
+      "Authorization": "Bearer " + etsyStore.accessToken,
+      "Content-Type":  "application/json",
+      ...(opts.headers || {}),
+    },
   });
-  if (!r.ok) { const t = await r.text(); throw new Error(`Etsy ${r.status}: ${t.slice(0,300)}`); }
+  if (!r.ok) {
+    const t = await r.text();
+    if (r.status === 403) {
+      console.error("[Etsy 403] endpoint=" + ep);
+      console.error("[Etsy 403] ETSY_API_KEY: " + (ETSY_API_KEY||"").slice(0,4) + "... len=" + (ETSY_API_KEY||"").length);
+      console.error("[Etsy 403] ETSY_SHARED_SECRET: " + (ETSY_SECRET||"").slice(0,4) + "... len=" + (ETSY_SECRET||"").length);
+      console.error("[Etsy 403] body: " + t.slice(0,300));
+      if (t.includes("Shared secret")) {
+        console.error("[Etsy 403] *** KEYS ARE SWAPPED IN RAILWAY — ETSY_API_KEY contains the shared secret value ***");
+      }
+    }
+    throw new Error("Etsy " + r.status + ": " + t.slice(0, 300));
+  }
   return r.json();
 }
 
