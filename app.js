@@ -174,52 +174,99 @@ function parsePrice(text) {
 // ETSY OAUTH
 // ════════════════════════════════════════════════════════════════════════════
 app.get("/api/etsy/debug", (req, res) => res.json({
-  hasApiKey: !!ETSY_API_KEY, hasSecret: !!ETSY_SECRET,
-  redirectUri: ETSY_REDIRECT || "NOT SET",
-  connected: !!etsyStore.accessToken, shopName: etsyStore.shopName || null,
+  hasApiKey:      !!ETSY_API_KEY,
+  hasSecret:      !!ETSY_SECRET,
+  redirectUri:    ETSY_REDIRECT || "NOT SET",
+  stateStored:    !!etsyStore.state,
+  verifierStored: !!etsyStore.codeVerifier,
+  connected:      !!etsyStore.accessToken,
+  shopName:       etsyStore.shopName || null,
+  connectedAt:    etsyStore.connectedAt || null,
 }));
 
 app.get("/api/etsy/connect", (req, res) => {
-  if (!ETSY_API_KEY) return res.status(500).send("<h2>Missing ETSY_API_KEY</h2>");
-  if (!ETSY_REDIRECT) return res.status(500).send("<h2>Missing ETSY_REDIRECT_URI</h2>");
-  const state = base64url(crypto.randomBytes(16));
+  console.log("[Etsy OAuth] Starting Etsy OAuth flow");
+  if (!ETSY_API_KEY) {
+    console.error("[Etsy OAuth] ETSY_API_KEY is not set");
+    return res.status(500).send("<h2>Missing ETSY_API_KEY</h2><p>Add it to Railway environment variables.</p>");
+  }
+  if (!ETSY_REDIRECT) {
+    console.error("[Etsy OAuth] ETSY_REDIRECT_URI is not set");
+    return res.status(500).send("<h2>Missing ETSY_REDIRECT_URI</h2><p>Set it to: https://your-app.railway.app/api/etsy/callback</p>");
+  }
+  const state        = base64url(crypto.randomBytes(16));
   const codeVerifier = generateCodeVerifier();
-  etsyStore.state = state; etsyStore.codeVerifier = codeVerifier;
+  const challenge    = generateCodeChallenge(codeVerifier);
+  etsyStore.state        = state;
+  etsyStore.codeVerifier = codeVerifier;
   const params = new URLSearchParams({
     response_type: "code", redirect_uri: ETSY_REDIRECT,
     scope: "listings_r listings_w shops_r transactions_r",
     client_id: ETSY_API_KEY, state,
-    code_challenge: generateCodeChallenge(codeVerifier),
+    code_challenge: challenge,
     code_challenge_method: "S256",
   });
-  res.redirect(`https://www.etsy.com/oauth/connect?${params.toString()}`);
+  const authUrl = `https://www.etsy.com/oauth/connect?${params.toString()}`;
+  console.log(`[Etsy OAuth] Redirecting to Etsy — redirect_uri=${ETSY_REDIRECT}`);
+  res.redirect(authUrl);
 });
 
 app.get("/api/etsy/callback", async (req, res) => {
+  console.log("[Etsy OAuth] Received Etsy callback — query:", JSON.stringify(req.query));
   const { code, state, error, error_description } = req.query;
-  if (error) return res.status(400).send(`<h2>Etsy Error</h2><p>${error}: ${error_description}</p><a href="/api/etsy/connect">Retry</a>`);
-  if (!code) return res.status(400).send(`<h2>Missing Code</h2><p>Redirect URI: <code>${ETSY_REDIRECT}</code></p><a href="/api/etsy/connect">Retry</a>`);
-  if (!state || state !== etsyStore.state) return res.status(400).send(`<h2>State Mismatch</h2><a href="/api/etsy/connect">Start over</a>`);
+  if (error) {
+    console.error(`[Etsy OAuth] Etsy returned error: ${error} — ${error_description}`);
+    return res.status(400).send(`<h2>Etsy Authorization Error</h2><p><strong>${error}</strong>: ${error_description||"unknown"}</p><p><a href="/api/etsy/connect">Try again</a></p>`);
+  }
+  if (!code) {
+    console.error(`[Etsy OAuth] No code in callback. redirect_uri=${ETSY_REDIRECT}`);
+    return res.status(400).send(`<h2>Missing Authorization Code</h2><p>Redirect URI must exactly match:<br><code>${ETSY_REDIRECT}</code></p><p><a href="/api/etsy/connect">Start over</a> | <a href="/api/etsy/debug">Debug</a></p>`);
+  }
+  if (!state || state !== etsyStore.state) {
+    console.error(`[Etsy OAuth] State mismatch — received: ${state}, stored: ${etsyStore.state}`);
+    return res.status(400).send(`<h2>OAuth State Mismatch</h2><p>Server may have restarted. <a href="/api/etsy/connect">Start over</a></p>`);
+  }
   try {
+    console.log("[Etsy OAuth] Exchanging authorization code for token...");
     const tr = await fetch("https://api.etsy.com/v3/public/oauth/token", {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "authorization_code", client_id: ETSY_API_KEY, redirect_uri: ETSY_REDIRECT, code, code_verifier: etsyStore.codeVerifier }),
+      body: new URLSearchParams({
+        grant_type: "authorization_code", client_id: ETSY_API_KEY,
+        redirect_uri: ETSY_REDIRECT, code, code_verifier: etsyStore.codeVerifier,
+      }),
     });
-    if (!tr.ok) { const e = await tr.text(); console.error("Token exchange:", e); return res.status(500).send("Token exchange failed."); }
+    if (!tr.ok) {
+      const errText = await tr.text();
+      console.error(`[Etsy OAuth] Etsy token exchange failed (${tr.status}): ${errText}`);
+      return res.status(500).send(`<h2>Token Exchange Failed</h2><p>Status ${tr.status} — check Railway logs.</p><p><a href="/api/etsy/connect">Retry</a></p>`);
+    }
     const tokens = await tr.json();
-    etsyStore.accessToken = tokens.access_token; etsyStore.refreshToken = tokens.refresh_token;
-    etsyStore.connectedAt = new Date().toISOString(); etsyStore.state = null; etsyStore.codeVerifier = null;
+    etsyStore.accessToken  = tokens.access_token;
+    etsyStore.refreshToken = tokens.refresh_token;
+    etsyStore.connectedAt  = new Date().toISOString();
+    etsyStore.state        = null;
+    etsyStore.codeVerifier = null;
+    console.log("[Etsy OAuth] Etsy token exchange success — fetching shop info...");
     try {
       const sd = await etsyFetch("/application/shops?limit=1");
-      if (sd?.results?.[0]) { etsyStore.shopId = sd.results[0].shop_id; etsyStore.shopName = sd.results[0].shop_name; }
-    } catch (e) { console.warn("Shop fetch:", e.message); }
+      if (sd?.results?.[0]) {
+        etsyStore.shopId   = sd.results[0].shop_id;
+        etsyStore.shopName = sd.results[0].shop_name;
+        console.log(`[Etsy OAuth] Shop found: id=${etsyStore.shopId} name="${etsyStore.shopName}"`);
+      }
+    } catch (shopErr) {
+      console.warn("[Etsy OAuth] Shop fetch failed (non-fatal):", shopErr.message);
+    }
     res.redirect("/?etsy=connected");
-  } catch (err) { console.error("OAuth callback:", err); res.status(500).send("OAuth failed."); }
+  } catch (err) {
+    console.error("[Etsy OAuth] OAuth callback exception:", err.message);
+    res.status(500).send(`<h2>OAuth Failed</h2><p>${err.message}</p><p><a href="/api/etsy/connect">Retry</a></p>`);
+  }
 });
 
 app.get("/api/etsy/status", (req, res) => {
-  if (!ETSY_API_KEY) return res.json({ connected: false, status: "unconfigured" });
-  if (!etsyStore.accessToken) return res.json({ connected: false, status: "disconnected" });
+  if (!ETSY_API_KEY) return res.json({ connected: false, status: "unconfigured", message: "ETSY_API_KEY not set in Railway." });
+  if (!etsyStore.accessToken) return res.json({ connected: false, status: "disconnected", message: "Etsy disconnected — reconnect required." });
   res.json({ connected: true, status: "connected", shopId: etsyStore.shopId, shopName: etsyStore.shopName, connectedAt: etsyStore.connectedAt });
 });
 
