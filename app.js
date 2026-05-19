@@ -374,16 +374,55 @@ app.post("/api/printify/create-product", async (req, res) => {
 
 app.post("/api/printify/publish-to-etsy", async (req, res) => {
   if (!etsyStore.accessToken) return res.status(401).json({error:"Etsy not connected."});
+
+  // ── Header diagnostics — logged on every sync attempt ──────────────────
+  const apiKeyPreview    = (ETSY_API_KEY    || "").slice(0,4) + "..." + (ETSY_API_KEY    || "").slice(-4);
+  const secretPreview    = (ETSY_SECRET     || "").slice(0,4) + "..." + (ETSY_SECRET     || "").slice(-4);
+  const tokenPreview     = (etsyStore.accessToken || "").slice(0,6) + "...";
+  console.log("[publish-to-etsy] Header check:");
+  console.log("  x-api-key will use ETSY_API_KEY  :", apiKeyPreview, "len=" + (ETSY_API_KEY||"").length);
+  console.log("  ETSY_SHARED_SECRET (NOT in header):", secretPreview, "len=" + (ETSY_SECRET||"").length);
+  console.log("  Authorization Bearer token starts :", tokenPreview);
+  console.log("  Keys match (would be swapped)?     :", ETSY_API_KEY === ETSY_SECRET ? "YES — IDENTICAL, PROBLEM" : "no — different values, good");
+
   const {printifyProductId,productType,aiDraft=""} = req.body;
   const t  = (sec(aiDraft,"ETSY SEO TITLE")||"Celestial Yokai Product").replace(/\*\*/g,"").trim().slice(0,140);
   const d  = sec(aiDraft,"DESCRIPTION")||t;
   const tg = tags(aiDraft);
   const pr = price(aiDraft)||18;
   const isPhys = ["shirt","poster","sticker"].includes(productType);
+
   try {
-    const l = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`,{method:"POST",body:JSON.stringify({quantity:999,title:t,description:d,price:pr,who_made:"i_did",when_made:"made_to_order",taxonomy_id:isPhys?68887794:2078,type:isPhys?"physical":"download",tags:tg,state:"draft"})});
-    res.json({success:true,listingId:l.listing_id,etsyUrl:l.url,printifyProductId:printifyProductId||null,state:"draft",tagCount:tg.length,publishLocked:"Publishing locked until quality/compliance verified."});
-  } catch(e) { res.status(500).json({error:e.message}); }
+    const l = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`, {
+      method: "POST",
+      body: JSON.stringify({
+        quantity:999, title:t, description:d, price:pr,
+        who_made:"i_did", when_made:"made_to_order",
+        taxonomy_id: isPhys ? 68887794 : 2078,
+        type: isPhys ? "physical" : "download",
+        tags: tg, state: "draft",
+      }),
+    });
+    res.json({success:true, listingId:l.listing_id, etsyUrl:l.url,
+      printifyProductId:printifyProductId||null, state:"draft",
+      tagCount:tg.length, publishLocked:"Publishing locked until quality/compliance verified."});
+  } catch(e) {
+    console.error("[publish-to-etsy] FAILED:", e.message);
+    // Return the diagnostic info alongside the error so it shows in the UI
+    res.status(500).json({
+      error: e.message,
+      debug: {
+        hasApiKey:         !!ETSY_API_KEY,
+        hasSharedSecret:   !!ETSY_SECRET,
+        usingApiKeyAsHeader: (ETSY_API_KEY||"").slice(0,4),
+        NOT_USING_SHARED_SECRET: true,
+        apiKeyLen:    (ETSY_API_KEY||"").length,
+        secretLen:    (ETSY_SECRET||"").length,
+        keysAreSwapped: ETSY_API_KEY === ETSY_SECRET,
+        fix: "In Railway variables: ETSY_API_KEY = keystring (shorter), ETSY_SHARED_SECRET = shared secret (longer). If lengths seem wrong, they are swapped.",
+      },
+    });
+  }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
