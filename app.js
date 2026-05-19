@@ -31,6 +31,35 @@ app.use(express.json({ limit: "20mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
+// ════════════════════════════════════════════════════════════════════════════
+// DEBUG ROUTES — safe to call in browser, never expose secrets
+// ════════════════════════════════════════════════════════════════════════════
+app.get("/api/debug/env", (req, res) => {
+  res.json({
+    hasAnthropicKey:    !!process.env.ANTHROPIC_API_KEY,
+    hasPrintifyKey:     !!process.env.PRINTIFY_API_KEY,
+    hasEtsyApiKey:      !!process.env.ETSY_API_KEY,
+    hasEtsySharedSecret:!!process.env.ETSY_SHARED_SECRET,
+    hasEtsyRedirectUri: !!process.env.ETSY_REDIRECT_URI,
+    etsyRedirectUri:    process.env.ETSY_REDIRECT_URI || "NOT SET",
+    etsyTokenInMemory:  !!etsyStore.accessToken,
+    etsyShopName:       etsyStore.shopName || null,
+    nodeVersion:        process.version,
+    note:               "Token is in-memory only — will reset on redeploy. Reconnect Etsy after each Railway deploy.",
+  });
+});
+
+app.get("/api/debug/routes", (req, res) => {
+  res.json({
+    etsyConnectRouteExists:   true,
+    etsyCallbackRouteExists:  true,
+    etsyStatusRouteExists:    true,
+    printifyStatusRouteExists:true,
+    debugEnvRouteExists:      true,
+  });
+});
+
+
 // ── PKCE ──────────────────────────────────────────────────────────────────────
 function base64url(buf) {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
@@ -207,7 +236,10 @@ app.get("/api/etsy/connect", (req, res) => {
     code_challenge_method: "S256",
   });
   const authUrl = `https://www.etsy.com/oauth/connect?${params.toString()}`;
-  console.log(`[Etsy OAuth] Redirecting to Etsy — redirect_uri=${ETSY_REDIRECT}`);
+  console.log(`[Etsy OAuth] API key present: ${!!ETSY_API_KEY}`);
+  console.log(`[Etsy OAuth] redirect_uri: ${ETSY_REDIRECT}`);
+  console.log(`[Etsy OAuth] scopes: listings_r listings_w shops_r transactions_r`);
+  console.log(`[Etsy OAuth] Full auth URL: ${authUrl}`);
   res.redirect(authUrl);
 });
 
@@ -274,7 +306,7 @@ app.get("/api/etsy/status", (req, res) => {
     return res.json({ connected: false, status: "disconnected", message: "Etsy disconnected — reconnect required." });
   }
   console.log("[Etsy] status: connected — shop=" + (etsyStore.shopName || "unknown"));
-  res.json({ connected: true, status: "connected", shopId: etsyStore.shopId, shopName: etsyStore.shopName, connectedAt: etsyStore.connectedAt });
+  res.json({ connected: true, status: "connected", shopId: etsyStore.shopId, shopName: etsyStore.shopName, connectedAt: etsyStore.connectedAt, warning: "Token stored in memory — will reset on redeploy." });
 });
 
 app.get("/api/etsy/shop", async (req, res) => {
@@ -324,13 +356,27 @@ app.get("/api/printify/status", async (req, res) => {
     console.log("[Printify] status: unconfigured — PRINTIFY_API_KEY missing");
     return res.json({ connected: false, message: "PRINTIFY_API_KEY not set." });
   }
+  // 8-second timeout so we never hang
+  const timer = setTimeout(() => {
+    if (!res.headersSent) {
+      console.error("[Printify] status: timed out after 8s");
+      res.json({ connected: false, message: "Printify API timed out after 8s." });
+    }
+  }, 8000);
   try {
-    console.log("[Printify] status: checking API...");
+    console.log("[Printify] status: calling Printify API...");
     const shops = await printifyFetch("/shops.json");
-    if (Array.isArray(shops) && shops.length) { printifyStore.shopId = shops[0].id; printifyStore.shopTitle = shops[0].title; }
-    console.log("[Printify] status: connected — " + shops.length + " shop(s)");
-    res.json({ connected: true, shopCount: shops.length, shops: shops.map(s => ({ id: s.id, title: s.title })), activeShopId: printifyStore.shopId });
+    clearTimeout(timer);
+    if (res.headersSent) return;
+    if (Array.isArray(shops) && shops.length) {
+      printifyStore.shopId   = shops[0].id;
+      printifyStore.shopTitle = shops[0].title;
+    }
+    console.log("[Printify] status: connected — " + (Array.isArray(shops) ? shops.length : 0) + " shop(s)");
+    res.json({ connected: true, shopCount: Array.isArray(shops) ? shops.length : 0, shops: Array.isArray(shops) ? shops.map(s => ({ id: s.id, title: s.title })) : [], activeShopId: printifyStore.shopId });
   } catch (err) {
+    clearTimeout(timer);
+    if (res.headersSent) return;
     console.error("[Printify] status check failed:", err.message);
     res.json({ connected: false, message: err.message });
   }
