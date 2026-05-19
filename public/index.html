@@ -348,6 +348,13 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
     </div>
   </div>
 
+  <!-- Memory warning — shown when Etsy is connected -->
+  <div id="memory-warning" style="display:none;background:rgba(232,201,122,.06);border:1px solid rgba(232,201,122,.2);border-radius:var(--r);padding:.45rem .9rem;margin-bottom:1rem;font-family:var(--fm);font-size:.52rem;color:rgba(232,201,122,.7);letter-spacing:.06em;line-height:1.5">
+    ⚠ Etsy token stored in memory — reconnect required after each Railway redeploy.
+    &nbsp;<a href="/api/debug/env" target="_blank" style="color:var(--gold);text-decoration:underline">debug/env</a>
+    &nbsp;<a href="/api/debug/routes" target="_blank" style="color:var(--gold);text-decoration:underline">debug/routes</a>
+  </div>
+
   <!-- HABITAT -->
   <div class="hab-wrap">
     <div class="hc-box">
@@ -849,6 +856,7 @@ async function checkEtsy(){
     if(d.connected){
       etsyConnected=true;
       setPill('etsy-pill','ok','CONNECTED');
+      const mw=document.getElementById('memory-warning');if(mw)mw.style.display='block';
       setPill('health-etsy-pill','ok','CONNECTED');
       if(d.shopName){
         const nm=document.getElementById('etsy-shop-name');
@@ -909,8 +917,9 @@ async function checkPrintify(){
 }
 
 function connectEtsy(){
-  console.log('[Etsy] Connect Etsy clicked — navigating to /api/etsy/connect');
-  window.location.href='/api/etsy/connect';
+  console.log('[Etsy] Connect Etsy button clicked — hard navigating to /api/etsy/connect');
+  // Hard navigation — not fetch, not AJAX
+  window.location.assign('/api/etsy/connect');
 }
 function disconnectEtsy(){
   if(!confirm('Disconnect Etsy from the Lantern District Market?'))return;
