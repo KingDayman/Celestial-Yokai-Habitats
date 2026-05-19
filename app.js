@@ -152,14 +152,12 @@ app.get("/api/etsy/debug", (req, res) => res.json({
 
 app.get("/api/etsy/connect", (req, res) => {
   console.log("✅ /api/etsy/connect HIT");
-  console.log("[Etsy] API key present:", !!ETSY_API_KEY);
-  console.log("[Etsy] Redirect URI:", ETSY_REDIRECT);
 
   if (!ETSY_API_KEY) {
-    return res.status(500).json({ error: "Missing ETSY_API_KEY", fix: "Add ETSY_API_KEY to Railway environment variables" });
+    return res.status(500).json({ error: "Missing ETSY_API_KEY" });
   }
   if (!ETSY_REDIRECT) {
-    return res.status(500).json({ error: "Missing ETSY_REDIRECT_URI", fix: "Set ETSY_REDIRECT_URI=https://YOUR-APP.railway.app/api/etsy/callback in Railway" });
+    return res.status(500).json({ error: "Missing ETSY_REDIRECT_URI" });
   }
 
   const state = b64url(crypto.randomBytes(16));
@@ -177,14 +175,29 @@ app.get("/api/etsy/connect", (req, res) => {
     code_challenge_method: "S256",
   });
   const url = "https://www.etsy.com/oauth/connect?" + params.toString();
-  console.log("[Etsy] Full auth URL:", url);
+  console.log("[Etsy] auth URL:", url);
 
-  // ?debug=1 returns JSON so you can inspect without following the redirect
-  if (req.query.debug === "1") {
-    return res.json({ ok: true, authUrl: url, redirectUri: ETSY_REDIRECT });
-  }
-
-  res.redirect(url);
+  // Return an HTML page that navigates itself — handles Safari redirect issues
+  res.setHeader("Content-Type", "text/html");
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="0;url=${url}">
+  <title>Connecting to Etsy...</title>
+  <style>
+    body { background: #030108; color: #e8c97a; font-family: monospace;
+           display: flex; flex-direction: column; align-items: center;
+           justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 2rem; }
+    a { color: #c084fc; font-size: 1.1rem; margin-top: 1rem; display: block; }
+  </style>
+</head>
+<body>
+  <p>✦ Connecting to Etsy...</p>
+  <a href="${url}">Tap here if not redirected automatically</a>
+  <script>window.location.replace("${url}");</script>
+</body>
+</html>`);
 });
 
 app.get("/api/etsy/callback", async (req, res) => {
