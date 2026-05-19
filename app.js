@@ -214,7 +214,11 @@ app.get("/api/etsy/debug", (req, res) => res.json({
 }));
 
 app.get("/api/etsy/connect", (req, res) => {
-  console.log("ETSY CONNECT ROUTE HIT");
+  console.log("✅ ETSY CONNECT ROUTE HIT");
+  // TEMP: ?test=1 returns JSON probe instead of redirecting
+  if (req.query.test === "1") {
+    return res.json({ ok: true, route: "/api/etsy/connect", hasKey: !!ETSY_API_KEY, redirectUri: ETSY_REDIRECT || "NOT SET" });
+  }
   console.log("[Etsy OAuth] Starting Etsy OAuth flow");
   if (!ETSY_API_KEY) {
     console.error("[Etsy OAuth] ETSY_API_KEY is not set");
