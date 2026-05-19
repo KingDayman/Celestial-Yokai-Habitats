@@ -265,8 +265,15 @@ app.get("/api/etsy/callback", async (req, res) => {
 });
 
 app.get("/api/etsy/status", (req, res) => {
-  if (!ETSY_API_KEY) return res.json({ connected: false, status: "unconfigured", message: "ETSY_API_KEY not set in Railway." });
-  if (!etsyStore.accessToken) return res.json({ connected: false, status: "disconnected", message: "Etsy disconnected — reconnect required." });
+  if (!ETSY_API_KEY) {
+    console.log("[Etsy] status: unconfigured — ETSY_API_KEY missing");
+    return res.json({ connected: false, status: "unconfigured", message: "ETSY_API_KEY not set in Railway." });
+  }
+  if (!etsyStore.accessToken) {
+    console.log("[Etsy] status: disconnected — no access token");
+    return res.json({ connected: false, status: "disconnected", message: "Etsy disconnected — reconnect required." });
+  }
+  console.log("[Etsy] status: connected — shop=" + (etsyStore.shopName || "unknown"));
   res.json({ connected: true, status: "connected", shopId: etsyStore.shopId, shopName: etsyStore.shopName, connectedAt: etsyStore.connectedAt });
 });
 
@@ -313,12 +320,20 @@ app.post("/api/etsy/create-draft", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 app.get("/api/printify/status", async (req, res) => {
-  if (!PRINTIFY_KEY) return res.json({ connected: false, message: "PRINTIFY_API_KEY not set." });
+  if (!PRINTIFY_KEY) {
+    console.log("[Printify] status: unconfigured — PRINTIFY_API_KEY missing");
+    return res.json({ connected: false, message: "PRINTIFY_API_KEY not set." });
+  }
   try {
+    console.log("[Printify] status: checking API...");
     const shops = await printifyFetch("/shops.json");
     if (Array.isArray(shops) && shops.length) { printifyStore.shopId = shops[0].id; printifyStore.shopTitle = shops[0].title; }
+    console.log("[Printify] status: connected — " + shops.length + " shop(s)");
     res.json({ connected: true, shopCount: shops.length, shops: shops.map(s => ({ id: s.id, title: s.title })), activeShopId: printifyStore.shopId });
-  } catch (err) { res.json({ connected: false, message: err.message }); }
+  } catch (err) {
+    console.error("[Printify] status check failed:", err.message);
+    res.json({ connected: false, message: err.message });
+  }
 });
 
 app.get("/api/printify/shops", async (req, res) => {
