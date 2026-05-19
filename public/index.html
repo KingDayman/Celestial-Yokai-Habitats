@@ -31,7 +31,6 @@ body::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opa
 /* GATE */
 #gate{display:none}
 
-
 .gate-runes{font-size:1.1rem;letter-spacing:.5em;opacity:.22;animation:rd 6s ease-in-out infinite}
 @keyframes rd{0%,100%{letter-spacing:.5em;opacity:.22}50%{letter-spacing:.7em;opacity:.42}}
 .gate-icon{font-size:4rem;filter:drop-shadow(0 0 28px rgba(232,201,122,.75));animation:gi 4s ease-in-out infinite}
@@ -49,6 +48,7 @@ body::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opa
 
 /* APP */
 #app{position:relative;z-index:10;max-width:780px;margin:0 auto;padding:0 1rem 4rem}
+
 
 /* HEADER */
 .hdr{text-align:center;padding:2rem 1rem 1.8rem;border-bottom:1px solid var(--bordergold);margin-bottom:2rem;position:relative}
@@ -314,7 +314,7 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
   <h1 class="gate-title">Kitsari Commerce Console<br><span style="font-size:.62em;opacity:.65">Lantern District Market</span></h1>
   <p class="gate-sub">v2 // ETSY + PRINTIFY + CLAUDE // LANTERN DISTRICT</p>
   <p class="gate-warn">✦ ENTERING ACTIVE COMMERCE HABITAT ✦</p>
-  <button class="gate-btn" id="gate-btn" onclick="enterRealm()" ontouchstart="enterRealm()" style="touch-action:manipulation;min-width:200px;min-height:48px;cursor:pointer">⟩ OPEN THE MARKET</button>
+  <button class="gate-btn" onclick="enterRealm()">⟩ OPEN THE MARKET</button>
   <div class="gate-runes" style="font-size:.82rem;margin-top:.3rem">鬼 龍 影 精 星 商 法</div>
 </div>
 
@@ -324,7 +324,7 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
 
 <div id="app">
   <header class="hdr">
-    <div class="hdr-badge"><span class="hdr-pip"></span><span class="hdr-badge-txt">LANTERN DISTRICT MARKET // LIVE ✦</span></div>
+    <div class="hdr-badge"><span class="hdr-pip"></span><span class="hdr-badge-txt">COMMERCE CONSOLE v2 // LANTERN DISTRICT MARKET // LIVE</span></div>
     <h1 class="hdr-title">Kitsari Commerce Console</h1>
     <div class="hdr-v">✦ v2 — Etsy + Printify + Claude ✦</div>
     <p class="hdr-sub">Lantern District Market</p>
@@ -396,10 +396,8 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
         <div class="wstep active" id="ws-1"><span class="wstep-num">①</span>CONCEPT</div>
         <div class="wstep" id="ws-2"><span class="wstep-num">②</span>CATALOG</div>
         <div class="wstep" id="ws-3"><span class="wstep-num">③</span>PROVIDER</div>
-        <div class="wstep" id="ws-4"><span class="wstep-num">④</span>ARTWORK</div>
-        <div class="wstep" id="ws-5"><span class="wstep-num">⑤</span>UPLOAD</div>
-        <div class="wstep" id="ws-6"><span class="wstep-num">⑥</span>CREATE</div>
-        <div class="wstep" id="ws-7"><span class="wstep-num">⑦</span>SYNC</div>
+        <div class="wstep" id="ws-4"><span class="wstep-num">④</span>CREATE</div>
+        <div class="wstep" id="ws-5"><span class="wstep-num">⑤</span>SYNC</div>
       </div>
 
       <!-- STAGE 1: CONCEPT INPUT -->
@@ -522,78 +520,14 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
         </div>
         <div class="btn-row">
           <button class="btn-act" onclick="goStage(2)">← BACK</button>
-          <button class="btn-send gold" id="stage3-btn" onclick="runStage3()" disabled>GENERATE ARTWORK ✦</button>
+          <button class="btn-send" id="stage3-btn" onclick="runStage3()" disabled>CREATE PRINTIFY DRAFT ✦</button>
         </div>
         <div class="err-box" id="stage3-err"></div>
       </div>
 
-      <!-- STAGE 4: ARTWORK GENERATION -->
+      <!-- STAGE 4: PRINTIFY PRODUCT CREATED -->
       <div class="wstage" id="stage-4">
         <div class="loading" id="stage4-loading">
-          <div class="orbs"><div class="orb g"></div><div class="orb g"></div><div class="orb g"></div></div>
-          <span class="load-txt" id="stage4-load-txt">Kitsari forges the sigil...</span>
-        </div>
-        <div id="artwork-result" style="display:none">
-          <p class="f-lbl" style="margin-bottom:.5rem">GENERATED ARTWORK</p>
-          <div style="text-align:center;margin-bottom:.75rem">
-            <img id="art-preview" src="" alt="Artwork preview"
-              style="max-width:200px;max-height:200px;border-radius:var(--r);border:1px solid var(--bordergold);box-shadow:0 0 20px rgba(232,201,122,.2)"/>
-          </div>
-          <div class="provider-box">
-            <div class="pb-row">
-              <span class="pb-label">ARTWORK TYPE</span>
-              <span class="pb-value" id="art-type">—</span>
-            </div>
-            <div class="pb-row" style="margin-top:.25rem">
-              <span class="pb-label">VISUAL PROMPT</span>
-              <span class="pb-score" id="art-prompt-short">—</span>
-            </div>
-          </div>
-          <div id="art-prompt-full" style="font-family:var(--fm);font-size:.5rem;color:var(--dim);margin-top:.5rem;line-height:1.6;padding:.5rem .75rem;background:rgba(0,0,0,.3);border-radius:var(--r);border:1px solid var(--borderdim)"></div>
-          <p style="font-family:var(--fm);font-size:.5rem;color:var(--muted);margin-top:.4rem;letter-spacing:.06em">
-            ✦ SVG sigil generated and ready for Printify upload. For photorealistic art, use the Visual Prompt above with DALL-E or Stability AI.
-          </p>
-        </div>
-        <div class="btn-row">
-          <button class="btn-act" onclick="goStage(3)">← BACK</button>
-          <button class="btn-send gold" id="stage4-btn" onclick="runStage4()" disabled>UPLOAD TO PRINTIFY ✦</button>
-        </div>
-        <div class="err-box" id="stage4-err"></div>
-      </div>
-
-      <!-- STAGE 5: IMAGE UPLOAD -->
-      <div class="wstage" id="stage-5">
-        <div class="loading" id="stage5-loading">
-          <div class="orbs"><div class="orb t"></div><div class="orb t"></div><div class="orb t"></div></div>
-          <span class="load-txt" id="stage5-load-txt">Uploading artwork to Printify...</span>
-        </div>
-        <div id="upload-result" style="display:none">
-          <div class="provider-box">
-            <div class="pb-row">
-              <span class="pb-label">PRINTIFY IMAGE ID</span>
-              <span class="pb-value" id="upload-img-id">—</span>
-            </div>
-            <div class="pb-row" style="margin-top:.25rem">
-              <span class="pb-label">STATUS</span>
-              <span class="pb-value" style="color:var(--green)">UPLOADED ✓</span>
-            </div>
-          </div>
-          <div id="upload-preview-wrap" style="text-align:center;margin-top:.6rem;display:none">
-            <img id="upload-preview" src="" alt="Upload preview"
-              style="max-width:160px;max-height:160px;border-radius:var(--r);border:1px solid var(--borderteal);box-shadow:0 0 16px rgba(45,212,191,.2)"/>
-            <p style="font-family:var(--fm);font-size:.48rem;color:var(--teal);margin-top:.3rem;letter-spacing:.08em">PRINTIFY PREVIEW</p>
-          </div>
-        </div>
-        <div class="btn-row">
-          <button class="btn-act" onclick="goStage(4)">← BACK</button>
-          <button class="btn-send" id="stage5-btn" onclick="runStage5()" disabled>CREATE PRINTIFY PRODUCT ✦</button>
-        </div>
-        <div class="err-box" id="stage5-err"></div>
-      </div>
-
-      <!-- STAGE 6: PRINTIFY PRODUCT CREATED -->
-      <div class="wstage" id="stage-6">
-        <div class="loading" id="stage6-loading">
           <div class="orbs"><div class="orb t"></div><div class="orb t"></div><div class="orb t"></div></div>
           <span class="load-txt">Creating Printify product draft...</span>
         </div>
@@ -616,15 +550,15 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
           </div>
         </div>
         <div class="btn-row">
-          <button class="btn-act" onclick="goStage(5)">← BACK</button>
-          <button class="btn-send gold" id="stage6-btn" onclick="runStage6()" disabled>SYNC TO ETSY DRAFT ✦</button>
+          <button class="btn-act" onclick="goStage(3)">← BACK</button>
+          <button class="btn-send gold" id="stage4-btn" onclick="runStage4()" disabled>SYNC TO ETSY DRAFT ✦</button>
         </div>
-        <div class="err-box" id="stage6-err"></div>
+        <div class="err-box" id="stage4-err"></div>
       </div>
 
-      <!-- STAGE 7: ETSY SYNC COMPLETE -->
-      <div class="wstage" id="stage-7">
-        <div class="loading" id="stage7-loading">
+      <!-- STAGE 5: ETSY SYNC COMPLETE -->
+      <div class="wstage" id="stage-5">
+        <div class="loading" id="stage5-loading">
           <div class="orbs"><div class="orb g"></div><div class="orb g"></div><div class="orb g"></div></div>
           <span class="load-txt">Syncing to Lantern District Market...</span>
         </div>
@@ -636,18 +570,16 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
         </div>
         <div class="sync-strip" id="sync-strip">
           <div class="sync-step" id="ss-ai"><span class="sdot"></span>AI Draft</div>
-          <div class="sync-step" id="ss-catalog"><span class="sdot"></span>Catalog</div>
-          <div class="sync-step" id="ss-provider"><span class="sdot"></span>Provider</div>
-          <div class="sync-step" id="ss-artwork"><span class="sdot"></span>Artwork</div>
-          <div class="sync-step" id="ss-upload"><span class="sdot"></span>Upload</div>
-          <div class="sync-step" id="ss-printify"><span class="sdot"></span>Printify</div>
-          <div class="sync-step" id="ss-etsy"><span class="sdot"></span>Etsy Draft</div>
+          <div class="sync-step" id="ss-catalog"><span class="sdot"></span>Catalog Resolved</div>
+          <div class="sync-step" id="ss-provider"><span class="sdot"></span>Provider Selected</div>
+          <div class="sync-step" id="ss-printify"><span class="sdot"></span>Printify Product</div>
+          <div class="sync-step" id="ss-etsy"><span class="sdot"></span>Etsy Draft Listing</div>
         </div>
         <div class="pub-lock">Autonomous publishing is locked until draft quality, Etsy compliance, and Printify sync are verified.</div>
         <div class="btn-row" style="margin-top:.7rem">
           <button class="btn-act" onclick="resetWizard()">✦ NEW PRODUCT</button>
         </div>
-        <div class="err-box" id="stage7-err"></div>
+        <div class="err-box" id="stage5-err"></div>
       </div>
 
     </div><!-- /wizard-card -->
@@ -811,21 +743,9 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
 ════════════════════════════════════════════════════════ */
 
 /* ── GATE ──────────────────────────────────────────────── */
-function enterRealm(){} // no-op: gate removed,550);
-  // Boot after next paint so app is visible first
-  requestAnimationFrame(function(){
-    requestAnimationFrame(function(){
-      boot();
-    });
-  });
-}
+function enterRealm(){} // gate removed
 function boot(){initBg();initFx();initHabitat();initClock();checkAllConnections();handleOAuthReturn();}
-// Auto-boot immediately — no gate required
-if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',boot);
-}else{
-  boot();
-}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',boot);}else{boot();}
 
 /* ── OAUTH RETURN ──────────────────────────────────────── */
 function handleOAuthReturn(){
@@ -939,15 +859,12 @@ async function loadLedger(){
 let currentPtype='sticker';
 let currentStickerStyle='sigil / mystical symbol';
 let wizardState={
-  aiDraft:'',productType:'',blueprintId:null,blueprintTitle:'',
+  aiDraft:'',productType:'',
+  blueprintId:null,blueprintTitle:'',
   providerId:null,providerName:'',providerLocation:'',providerScore:0,
   variantId:null,variantTitle:'',
-  // Artwork pipeline
-  artworkDataUrl:null,artworkBase64:null,artworkMimeType:null,visualPrompt:null,
-  // Printify
-  printifyImageId:null,printifyProductId:null,
-  // Etsy
-  etsyListingId:null,etsyUrl:null
+  printifyProductId:null,
+  etsyListingId:null,etsyUrl:null,
 };
 
 function setPtype(btn){
@@ -981,7 +898,7 @@ function setSyncStep(id,state,label){
   el.innerHTML='<span class="sdot"></span>'+label;
 }
 function resetWizard(){
-  wizardState={aiDraft:'',productType:'',blueprintId:null,blueprintTitle:'',providerId:null,providerName:'',providerLocation:'',providerScore:0,variantId:null,variantTitle:'',artworkDataUrl:null,artworkBase64:null,artworkMimeType:null,visualPrompt:null,printifyImageId:null,printifyProductId:null,etsyListingId:null,etsyUrl:null};
+  wizardState={aiDraft:'',productType:'',blueprintId:null,blueprintTitle:'',providerId:null,providerName:'',providerLocation:'',providerScore:0,variantId:null,variantTitle:'',printifyProductId:null,etsyListingId:null,etsyUrl:null};
   goStage(1);
   document.getElementById('gp-concept').value='';
   document.getElementById('gp-buyer').value='';
@@ -989,14 +906,11 @@ function resetWizard(){
   document.getElementById('draft-body').innerHTML='';
   document.getElementById('success-banner').style.display='none';
   hideEl('catalog-result');hideEl('provider-result');hideEl('printify-result');
-  hideEl('artwork-result');hideEl('upload-result');
-  ['stage1-err','stage2-err','stage3-err','stage4-err','stage5-err','stage6-err','stage7-err'].forEach(hideEl);
-  ['ss-ai','ss-catalog','ss-provider','ss-artwork','ss-upload','ss-printify','ss-etsy'].forEach(id=>setSyncStep(id,'','—'));
+  ['stage1-err','stage2-err','stage3-err','stage4-err','stage5-err'].forEach(hideEl);
+  ['ss-ai','ss-catalog','ss-provider','ss-printify','ss-etsy'].forEach(id=>setSyncStep(id,'','—'));
   document.getElementById('stage2-btn').disabled=true;
   document.getElementById('stage3-btn').disabled=true;
   document.getElementById('stage4-btn').disabled=true;
-  const s5=document.getElementById('stage5-btn');if(s5)s5.disabled=true;
-  const s6=document.getElementById('stage6-btn');if(s6)s6.disabled=true;
 }
 
 /* ── STAGE 1: AI DRAFT ─────────────────────────────────── */
@@ -1005,7 +919,7 @@ async function runStage1(){
   showLoading('stage1-loading',true);
   disableBtn('stage1-btn',true,'GENERATING...');
   hideEl('stage1-err');
-  habFlash('draft');
+  habFlash('gold');
 
   try{
     const r=await fetch('/api/commerce/generate-product',{
@@ -1146,215 +1060,102 @@ async function fetchProviderAndAdvance(){
   }
 }
 
-/* ── STAGE 3: GENERATE ARTWORK ──────────────────────────── */
+/* ── STAGE 3: CREATE PRINTIFY PRODUCT ──────────────────── */
 async function runStage3(){
   showLoading('stage3-loading',true);
-  disableBtn('stage3-btn',true,'GENERATING...');
-  hideEl('stage3-err');
-  habFlash('gold');
-
-  const concept = getVal('gp-concept') || wizardState.aiDraft.slice(0,80);
-  // Map stickerStyle display names to backend style keys
-  const styleMap = {
-    'sigil / mystical symbol':'sigil',
-    'Lantern District seal':'seal',
-    'habitat emblem / territory badge':'emblem',
-    'celestial warning / omen sign':'warning',
-    'Kitsari fox symbol / brand mark':'kitsari',
-    'NFT faction decal / clan mark':'faction'
-  };
-  const stickerKey = styleMap[currentStickerStyle] || 'sigil';
-
-  try {
-    const r = await fetch('/api/art/generate', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ concept, stickerStyle: stickerKey, productType: wizardState.productType, theme: concept }),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Artwork generation failed');
-
-    wizardState.artworkDataUrl = d.artworkDataUrl;
-    wizardState.artworkBase64 = d.artworkBase64;
-    wizardState.artworkMimeType = d.artworkMimeType;
-    wizardState.visualPrompt = d.visualPrompt;
-
-    // Show artwork preview
-    const previewEl = document.getElementById('art-preview');
-    previewEl.src = d.artworkDataUrl;
-    setEl('art-type', d.artworkType === 'svg_placeholder' ? 'SVG Sigil (print-ready)' : d.artworkType);
-    const shortPrompt = (d.visualPrompt || '').slice(0, 120);
-    setEl('art-prompt-short', shortPrompt + (d.visualPrompt && d.visualPrompt.length > 120 ? '...' : ''));
-    const fullEl = document.getElementById('art-prompt-full');
-    if (fullEl && d.visualPrompt) fullEl.textContent = 'VISUAL PROMPT: ' + d.visualPrompt;
-
-    setSyncStep('ss-artwork','done','Artwork generated ✓ — '+d.artworkType);
-    showEl('artwork-result');
-    goStage(4);
-    document.getElementById('stage4-btn').disabled = false;
-    habFlash('gold');
-
-  } catch(e) {
-    console.error('[Stage3]', e.message);
-    showErr('stage3-err', e.message);
-    disableBtn('stage3-btn', false, 'RETRY ARTWORK ✦');
-  } finally {
-    showLoading('stage3-loading', false);
-  }
-}
-
-/* ── STAGE 4: UPLOAD ARTWORK TO PRINTIFY ─────────────────── */
-async function runStage4(){
-  if (!wizardState.artworkBase64 && !wizardState.artworkDataUrl) {
-    showErr('stage4-err','No artwork available. Go back and regenerate.');
-    return;
-  }
-  showLoading('stage4-loading', true, 'Uploading artwork to Printify...');
-  disableBtn('stage4-btn', true, 'UPLOADING...');
-  hideEl('stage4-err');
-  habFlash('upload');
-  setSyncStep('ss-upload','active','Uploading artwork...');
-
-  try {
-    const r = await fetch('/api/printify/upload-image', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        imageBase64: wizardState.artworkBase64,
-        mimeType: wizardState.artworkMimeType || 'image/svg+xml',
-      }),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Image upload failed');
-
-    wizardState.printifyImageId = d.imageId;
-    console.log('[Stage4] Image uploaded — id=' + d.imageId);
-
-    setEl('upload-img-id', d.imageId);
-    if (d.previewUrl) {
-      const previewImg = document.getElementById('upload-preview');
-      const previewWrap = document.getElementById('upload-preview-wrap');
-      previewImg.src = d.previewUrl;
-      previewWrap.style.display = 'block';
-    }
-
-    setSyncStep('ss-upload','done','Upload ✓ — Printify image id=' + d.imageId);
-    showEl('upload-result');
-    goStage(5);
-    document.getElementById('stage5-btn').disabled = false;
-    habFlash('teal');
-
-  } catch(e) {
-    console.error('[Stage4]', e.message);
-    setSyncStep('ss-upload','error','Upload failed: ' + e.message);
-    showErr('stage4-err', e.message);
-    disableBtn('stage4-btn', false, 'RETRY UPLOAD ✦');
-  } finally {
-    showLoading('stage4-loading', false);
-  }
-}
-
-/* ── STAGE 5: CREATE PRINTIFY PRODUCT ───────────────────── */
-async function runStage5(){
-  if (!wizardState.printifyImageId) { showErr('stage5-err','No image uploaded. Go back to upload artwork.'); return; }
-  if (!wizardState.blueprintId)     { showErr('stage5-err','No blueprint selected. Go back to catalog.'); return; }
-  if (!wizardState.providerId)      { showErr('stage5-err','No provider selected. Go back to catalog.'); return; }
-  if (!wizardState.variantId)       { showErr('stage5-err','No variant selected. Go back to catalog.'); return; }
-
-  showLoading('stage6-loading', true);
-  disableBtn('stage5-btn', true, 'CREATING...');
-  hideEl('stage5-err');
+  disableBtn('stage3-btn',true,'CREATING...');
+  hideEl('stage3-err');hideEl('printify-result');
   habFlash('teal');
-  setSyncStep('ss-printify','active','Creating Printify product...');
 
-  const title = (parseSection(wizardState.aiDraft,'PRODUCT NAME') || parseSection(wizardState.aiDraft,'ETSY SEO TITLE') || 'Celestial Yokai Product').replace(/**/g,'').split('
-')[0].trim().slice(0,140);
-  const desc = parseSection(wizardState.aiDraft,'DESCRIPTION') || title;
-  const price = parsePriceFromText(wizardState.aiDraft);
+  const title=(parseSection(wizardState.aiDraft,'PRODUCT NAME')||parseSection(wizardState.aiDraft,'ETSY SEO TITLE')||'Celestial Yokai Product').replace(/\*\*/g,'').split('\n')[0].trim().slice(0,140);
+  const desc=parseSection(wizardState.aiDraft,'DESCRIPTION')||title;
+  const price=parsePriceFromText(wizardState.aiDraft);
 
-  console.log('[Stage5] Creating Printify product — bp='+wizardState.blueprintId+' prv='+wizardState.providerId+' var='+wizardState.variantId+' img='+wizardState.printifyImageId+' price='+price+' title="'+title+'"');
+  console.log('[Wizard Stage3] bp='+wizardState.blueprintId+' provider='+wizardState.providerId+' variant='+wizardState.variantId+' price='+price+' title="'+title+'"');
 
-  try {
-    const r = await fetch('/api/printify/create-product', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        title, description: desc, price,
-        blueprintId:     wizardState.blueprintId,
-        printProviderId: wizardState.providerId,
-        variantId:       wizardState.variantId,
-        printifyImageId: wizardState.printifyImageId,
+  try{
+    const r=await fetch('/api/printify/create-product',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        title,description:desc,price,
+        blueprintId:wizardState.blueprintId,
+        printProviderId:wizardState.providerId,
+        variantId:wizardState.variantId,
       }),
     });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Printify creation failed. Debug: ' + JSON.stringify(d.debug || {}));
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Printify creation failed. Debug: '+JSON.stringify(d.debug||{}));
 
-    wizardState.printifyProductId = d.printifyProductId;
-    setSyncStep('ss-printify','done','Printify Product ✓ id=' + d.printifyProductId);
+    wizardState.printifyProductId=d.printifyProductId;
+    setSyncStep('ss-printify','done','Printify Product ✓ id='+d.printifyProductId);
 
-    setEl('printify-pid', d.printifyProductId);
-    setEl('printify-bp', 'bp=' + d.blueprintId + ' prv=' + d.printProviderId);
-    setEl('printify-prov', 'variant=' + d.variantId);
-    setEl('printify-img-note', 'Image attached ✓');
+    setEl('printify-pid',d.printifyProductId);
+    setEl('printify-bp','bp='+d.blueprintId+' prv='+d.printProviderId);
+    setEl('printify-prov','variant='+d.variantId);
+    setEl('printify-img-note',d.hasImage?'Art uploaded':'Upload art via Printify dashboard');
     showEl('printify-result');
 
-    goStage(6);
-    const s6btn = document.getElementById('stage6-btn');
-    s6btn.disabled = !etsyConnected;
-    if (!etsyConnected) showErr('stage6-err','Connect Etsy to sync this draft to your shop.');
+    goStage(4);
+    const s4btn=document.getElementById('stage4-btn');
+    s4btn.disabled=!etsyConnected;
+    if(!etsyConnected){s4btn.title='Connect Etsy first';showErr('stage4-err','Connect Etsy to sync this draft to your shop.');}
     habFlash('teal');
 
-  } catch(e) {
-    console.error('[Stage5]', e.message);
-    setSyncStep('ss-printify','error','Printify failed: ' + e.message);
-    showErr('stage5-err', e.message);
-    disableBtn('stage5-btn', false, 'RETRY CREATE ✦');
-  } finally {
-    showLoading('stage6-loading', false);
-    showLoading('stage5-loading', false);
+  }catch(e){
+    console.error('[Wizard Stage3]',e.message);
+    showErr('stage3-err',e.message);
+    disableBtn('stage3-btn',false,'CREATE PRINTIFY DRAFT ✦');
+  }finally{
+    showLoading('stage3-loading',false);
   }
 }
 
-/* ── STAGE 6: SYNC TO ETSY ──────────────────────────────── */
-async function runStage6(){
-  if (!etsyConnected) { showErr('stage6-err','Connect Etsy first.'); return; }
-  showLoading('stage7-loading', true);
-  disableBtn('stage6-btn', true, 'SYNCING...');
-  hideEl('stage6-err');
-  habFlash('etsy');
-  goStage(7);
+/* ── STAGE 4: SYNC TO ETSY ─────────────────────────────── */
+async function runStage4(){
+  if(!etsyConnected){showErr('stage4-err','Connect Etsy first.');return;}
+  showLoading('stage4-loading',true);
+  disableBtn('stage4-btn',true,'SYNCING...');
+  hideEl('stage4-err');
+  habFlash('gold');
+
+  goStage(5);
   setSyncStep('ss-etsy','active','Syncing to Etsy draft...');
 
-  try {
-    const r = await fetch('/api/printify/publish-to-etsy', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        printifyProductId: wizardState.printifyProductId,
-        productType:       wizardState.productType,
-        aiDraft:           wizardState.aiDraft,
+  try{
+    const r=await fetch('/api/printify/publish-to-etsy',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        printifyProductId:wizardState.printifyProductId,
+        productType:wizardState.productType,
+        aiDraft:wizardState.aiDraft,
       }),
     });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Etsy sync failed');
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Etsy sync failed');
 
-    wizardState.etsyListingId = d.listingId;
-    wizardState.etsyUrl       = d.etsyUrl;
+    wizardState.etsyListingId=d.listingId;
+    wizardState.etsyUrl=d.etsyUrl;
 
-    setSyncStep('ss-etsy','done','Etsy Draft ✓ id=' + d.listingId + ' tags=' + d.tagCount);
+    setSyncStep('ss-etsy','done','Etsy Draft ✓ id='+d.listingId+' tags='+d.tagCount);
 
-    const banner = document.getElementById('success-banner');
-    banner.style.display = 'block';
-    const link = document.getElementById('etsy-draft-link');
-    if (d.etsyUrl) { link.href = d.etsyUrl; link.style.display = 'inline-block'; }
+    const banner=document.getElementById('success-banner');
+    banner.style.display='block';
+    const link=document.getElementById('etsy-draft-link');
+    if(d.etsyUrl){link.href=d.etsyUrl;link.style.display='inline-block';}
 
     habFlash('gold');
-    setTimeout(brightLanterns, 200);
-    if (document.getElementById('panel-ledger').classList.contains('active')) loadLedger();
+    setTimeout(brightLanterns,200);
 
-  } catch(e) {
-    console.error('[Stage6]', e.message);
-    setSyncStep('ss-etsy','error','Etsy sync failed: ' + e.message);
-    showErr('stage7-err', e.message);
-    disableBtn('stage6-btn', false, 'RETRY SYNC ✦');
-  } finally {
-    showLoading('stage7-loading', false);
+    // Update ledger if open
+    if(document.getElementById('panel-ledger').classList.contains('active'))loadLedger();
+
+  }catch(e){
+    console.error('[Wizard Stage4]',e.message);
+    setSyncStep('ss-etsy','error','Etsy sync failed: '+e.message);
+    showErr('stage5-err',e.message);
+    disableBtn('stage4-btn',false,'SYNC TO ETSY DRAFT ✦');
+  }finally{
+    showLoading('stage4-loading',false);
   }
 }
 
