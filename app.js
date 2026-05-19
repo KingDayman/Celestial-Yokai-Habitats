@@ -152,20 +152,38 @@ app.get("/api/etsy/debug", (req, res) => res.json({
 
 app.get("/api/etsy/connect", (req, res) => {
   console.log("✅ /api/etsy/connect HIT");
-  if (!ETSY_API_KEY) return res.status(500).send("<h2>Missing ETSY_API_KEY</h2><p>Add to Railway env vars.</p>");
-  if (!ETSY_REDIRECT) return res.status(500).send("<h2>Missing ETSY_REDIRECT_URI</h2><p>Set to: https://YOUR-APP.railway.app/api/etsy/callback</p>");
+  console.log("[Etsy] API key present:", !!ETSY_API_KEY);
+  console.log("[Etsy] Redirect URI:", ETSY_REDIRECT);
+
+  if (!ETSY_API_KEY) {
+    return res.status(500).json({ error: "Missing ETSY_API_KEY", fix: "Add ETSY_API_KEY to Railway environment variables" });
+  }
+  if (!ETSY_REDIRECT) {
+    return res.status(500).json({ error: "Missing ETSY_REDIRECT_URI", fix: "Set ETSY_REDIRECT_URI=https://YOUR-APP.railway.app/api/etsy/callback in Railway" });
+  }
+
   const state = b64url(crypto.randomBytes(16));
   const ver   = makeVerifier();
-  etsyStore.state = state; etsyStore.codeVerifier = ver;
+  etsyStore.state = state;
+  etsyStore.codeVerifier = ver;
+
   const params = new URLSearchParams({
-    response_type:"code", redirect_uri:ETSY_REDIRECT,
-    scope:"listings_r listings_w shops_r transactions_r",
-    client_id:ETSY_API_KEY, state,
-    code_challenge:makeChallenge(ver), code_challenge_method:"S256",
+    response_type: "code",
+    redirect_uri: ETSY_REDIRECT,
+    scope: "listings_r listings_w shops_r transactions_r",
+    client_id: ETSY_API_KEY,
+    state,
+    code_challenge: makeChallenge(ver),
+    code_challenge_method: "S256",
   });
-  const url = `https://www.etsy.com/oauth/connect?${params}`;
-  console.log(`[Etsy] redirect_uri=${ETSY_REDIRECT}`);
-  console.log(`[Etsy] auth url=${url}`);
+  const url = "https://www.etsy.com/oauth/connect?" + params.toString();
+  console.log("[Etsy] Full auth URL:", url);
+
+  // ?debug=1 returns JSON so you can inspect without following the redirect
+  if (req.query.debug === "1") {
+    return res.json({ ok: true, authUrl: url, redirectUri: ETSY_REDIRECT });
+  }
+
   res.redirect(url);
 });
 
