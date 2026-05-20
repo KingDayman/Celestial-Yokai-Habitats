@@ -1264,12 +1264,14 @@ async function runStage3(){
 
 /* ── STAGE 4: SYNC TO ETSY ─────────────────────────────── */
 async function runStage4(){
-  if(!etsyConnected){showErr('stage4-err','Connect Etsy first.');return;}
+  if(!etsyConnected){
+    showErr('stage4-err','Etsy not connected — tap CONNECT ETSY above first.');
+    return;
+  }
   showLoading('stage4-loading',true);
   disableBtn('stage4-btn',true,'SYNCING...');
   hideEl('stage4-err');
   habFlash('gold');
-
   goStage(5);
   setSyncStep('ss-etsy','active','Syncing to Etsy draft...');
 
@@ -1283,11 +1285,31 @@ async function runStage4(){
       }),
     });
     const d=await r.json();
+
+    // 403 = stale/corrupt token — must reconnect Etsy
+    if(r.status===403){
+      const msg='Etsy token expired or invalid — you must reconnect Etsy.';
+      setSyncStep('ss-etsy','error',msg);
+      // Show reconnect instructions with a direct link
+      const errEl=document.getElementById('stage5-err');
+      if(errEl){
+        errEl.style.display='block';
+        errEl.innerHTML=msg+
+          ' <a href="/api/etsy/disconnect" target="_blank" '+
+          'style="color:var(--gold);text-decoration:underline" '+
+          'onclick="clearEtsyAndReconnect();return false;">'+
+          'Click here to clear token and reconnect</a>';
+      }
+      etsyConnected=false;
+      setPill('etsy-pill','bad','RECONNECT REQUIRED');
+      disableBtn('stage4-btn',false,'SYNC TO ETSY DRAFT ✦');
+      return;
+    }
+
     if(!r.ok)throw new Error(d.error||'Etsy sync failed');
 
     wizardState.etsyListingId=d.listingId;
     wizardState.etsyUrl=d.etsyUrl;
-
     setSyncStep('ss-etsy','done','Etsy Draft ✓ id='+d.listingId+' tags='+d.tagCount);
 
     const banner=document.getElementById('success-banner');
@@ -1297,18 +1319,22 @@ async function runStage4(){
 
     habFlash('gold');
     setTimeout(brightLanterns,200);
-
-    // Update ledger if open
     if(document.getElementById('panel-ledger').classList.contains('active'))loadLedger();
 
   }catch(e){
-    console.error('[Wizard Stage4]',e.message);
+    console.error('[Stage4]',e.message);
     setSyncStep('ss-etsy','error','Etsy sync failed: '+e.message);
     showErr('stage5-err',e.message);
     disableBtn('stage4-btn',false,'SYNC TO ETSY DRAFT ✦');
   }finally{
     showLoading('stage4-loading',false);
   }
+}
+
+async function clearEtsyAndReconnect(){
+  // Clear the stale token server-side, then redirect to OAuth
+  try{ await fetch('/api/etsy/disconnect'); }catch(e){}
+  window.location.href='/api/etsy/connect';
 }
 
 /* ── CATALOG CHECK (debug tool) ─────────────────────────── */
