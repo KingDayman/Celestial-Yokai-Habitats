@@ -88,6 +88,8 @@ function makeChallenge(v){ return b64url(crypto.createHash("sha256").update(v).d
 async function etsyFetch(ep, opts={}) {
   if (!etsyStore.accessToken) throw new Error("Etsy not connected — reconnect via /api/etsy/connect");
   if (!ETSY_API_KEY) throw new Error("ETSY_API_KEY not set in Railway env vars");
+  // TEMP FULL KEY LOG — remove after fixing 403
+  console.log("[etsyFetch] ep=" + ep + " x-api-key=" + ETSY_API_KEY + " token-start=" + (etsyStore.accessToken||" ").slice(0,12));
   const r = await fetch("https://openapi.etsy.com/v3" + ep, {
     ...opts,
     headers: {
