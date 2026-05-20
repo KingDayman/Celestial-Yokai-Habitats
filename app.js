@@ -58,6 +58,19 @@ app.get("/api/debug/etsy-headers", (req, res) => {
   });
 });
 
+app.get("/api/debug/keys", (req, res) => {
+  // Etsy keystring: typically looks like 'aaaabbbbcccc...' alphanumeric, ~24 chars
+  // Etsy shared secret: longer, ~32 chars, may contain hyphens
+  const k = ETSY_API_KEY    || '';
+  const s = ETSY_SECRET     || '';
+  res.json({
+    ETSY_API_KEY:    { first4: k.slice(0,4), last4: k.slice(-4), length: k.length, hasHyphens: k.includes('-') },
+    ETSY_SHARED_SECRET: { first4: s.slice(0,4), last4: s.slice(-4), length: s.length, hasHyphens: s.includes('-') },
+    likelySwapped: k.length > 0 && s.length > 0 && k.length > s.length,
+    note: 'Etsy keystring is usually shorter (~24 chars, no hyphens). Shared secret is longer (~32 chars, may have hyphens).',
+  });
+});
+
 app.get("/api/debug/routes", (req, res) => res.json({
   fileRunning:              "app.js",
   etsyConnectRouteExists:   true,
