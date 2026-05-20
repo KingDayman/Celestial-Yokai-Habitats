@@ -238,6 +238,18 @@ app.get("/api/etsy/status", (req, res) => {
   res.json({connected:true,status:"connected",shopId:etsyStore.shopId,shopName:etsyStore.shopName,connectedAt:etsyStore.connectedAt,warning:"Token is in-memory — resets on redeploy."});
 });
 
+app.get("/api/etsy/disconnect", (req, res) => {
+  console.log("[Etsy] Disconnecting — clearing token from memory");
+  etsyStore.accessToken  = null;
+  etsyStore.refreshToken = null;
+  etsyStore.shopId       = null;
+  etsyStore.shopName     = null;
+  etsyStore.connectedAt  = null;
+  etsyStore.state        = null;
+  etsyStore.codeVerifier = null;
+  res.json({ disconnected: true, message: "Token cleared. Visit /api/etsy/connect to reconnect." });
+});
+
 app.get("/api/etsy/shop", async (req, res) => {
   if (!etsyStore.accessToken) return res.status(401).json({error:"Etsy not connected."});
   try {
