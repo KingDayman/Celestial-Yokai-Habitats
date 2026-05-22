@@ -93,7 +93,7 @@ async function etsyFetch(ep, opts={}) {
   const r = await fetch("https://openapi.etsy.com/v3" + ep, {
     ...opts,
     headers: {
-      "x-api-key":     ETSY_API_KEY,          // keystring only — NOT the shared secret
+      "x-api-key":     ETSY_API_KEY + ":" + ETSY_SECRET,  // Etsy v3: keystring:sharedsecret
       "Authorization": "Bearer " + etsyStore.accessToken,
       "Content-Type":  "application/json",
       ...(opts.headers || {}),
