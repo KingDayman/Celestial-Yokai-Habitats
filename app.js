@@ -189,14 +189,21 @@ function price(text) { const m=text.match(/\$(\d+(?:\.\d+)?)/); return m?parseFl
 // Always returns a valid integer Etsy shop ID, fetching it live if not cached
 async function getEtsyShopId() {
   if (etsyStore.shopId && parseInt(etsyStore.shopId, 10)) {
-    return parseInt(etsyStore.shopId, 10);
+    const id = parseInt(etsyStore.shopId, 10);
+    console.log("[Etsy] getEtsyShopId → cached:", id);
+    return id;
   }
-  console.log("[Etsy] shopId missing — fetching from API...");
-  const d = await etsyFetch("/application/shops?limit=1");
-  if (!d?.results?.[0]) throw new Error("No Etsy shop found — make sure your shop is active");
-  etsyStore.shopId   = parseInt(d.results[0].shop_id, 10);
-  etsyStore.shopName = d.results[0].shop_name;
-  console.log("[Etsy] shopId resolved: " + etsyStore.shopId + " (" + etsyStore.shopName + ")");
+  console.log("[Etsy] shopId missing — fetching from /application/users/me/shops...");
+  // Use the authenticated user's own shops endpoint
+  const d = await etsyFetch("/application/users/me/shops");
+  console.log("[Etsy] /users/me/shops response:", JSON.stringify(d).slice(0, 300));
+  // Response is a single shop object, not an array
+  const shopId = d?.shop_id || d?.results?.[0]?.shop_id;
+  const shopName = d?.shop_name || d?.results?.[0]?.shop_name;
+  if (!shopId) throw new Error("Could not resolve shop ID. Response: " + JSON.stringify(d).slice(0,200));
+  etsyStore.shopId   = parseInt(shopId, 10);
+  etsyStore.shopName = shopName;
+  console.log("[Etsy] shopId resolved:", etsyStore.shopId, "name:", etsyStore.shopName);
   return etsyStore.shopId;
 }
 
