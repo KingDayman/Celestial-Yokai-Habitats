@@ -240,7 +240,7 @@ app.get("/api/etsy/callback", async (req, res) => {
     console.log("[Etsy] token exchange SUCCESS");
     try {
       const sd = await etsyFetch("/application/shops?limit=1");
-      if (sd?.results?.[0]) { etsyStore.shopId=sd.results[0].shop_id; etsyStore.shopName=sd.results[0].shop_name; }
+      if (sd?.results?.[0]) { etsyStore.shopId=parseInt(sd.results[0].shop_id,10); etsyStore.shopName=sd.results[0].shop_name; }
       console.log(`[Etsy] shop: ${etsyStore.shopName}`);
     } catch(e) { console.warn("[Etsy] shop fetch failed (non-fatal):", e.message); }
     res.redirect("/?etsy=connected");
@@ -268,7 +268,7 @@ app.get("/api/etsy/disconnect", (req, res) => {
 app.get("/api/etsy/shop", async (req, res) => {
   if (!etsyStore.accessToken) return res.status(401).json({error:"Etsy not connected."});
   try {
-    if (!etsyStore.shopId) { const d=await etsyFetch("/application/shops?limit=1"); if(d?.results?.[0]){etsyStore.shopId=d.results[0].shop_id;etsyStore.shopName=d.results[0].shop_name;} }
+    if (!etsyStore.shopId) { const d=await etsyFetch("/application/shops?limit=1"); if(d?.results?.[0]){etsyStore.shopId=parseInt(d.results[0].shop_id,10);etsyStore.shopName=d.results[0].shop_name;} }
     res.json(await etsyFetch(`/application/shops/${etsyStore.shopId}`));
   } catch(e) { res.status(500).json({error:e.message}); }
 });
@@ -284,7 +284,9 @@ app.post("/api/etsy/create-draft", async (req, res) => {
   const {title,description,tags:t,price:p,type} = req.body;
   if (!title||!description) return res.status(400).json({error:"Title and description required."});
   try {
-    const l = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`, {method:"POST",body:JSON.stringify({quantity:999,title:title.slice(0,140),description,price:parseFloat(p)||18,who_made:"i_did",when_made:"made_to_order",taxonomy_id:2078,type:type||"download",tags:(t||[]).slice(0,13),state:"draft"})});
+    const shopIdInt = parseInt(etsyStore.shopId, 10);
+    if (!shopIdInt) throw new Error("Shop ID not found — reconnect Etsy");
+    const l = await etsyFetch(`/application/shops/${shopIdInt}/listings`, {method:"POST",body:JSON.stringify({quantity:999,title:title.slice(0,140),description,price:parseFloat(p)||18,who_made:"i_did",when_made:"made_to_order",taxonomy_id:2078,type:type||"download",tags:(t||[]).slice(0,13),state:"draft"})});
     res.json({success:true,listingId:l.listing_id,url:l.url,state:"draft"});
   } catch(e) { res.status(500).json({error:e.message}); }
 });
