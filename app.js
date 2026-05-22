@@ -185,6 +185,21 @@ function sec(text, h) { const m=text.match(new RegExp(`##\\s*${h}\\s*\\n([\\s\\S
 function tags(text) { return sec(text,"13 ETSY TAGS").split(/,\s*|\n/).map(t=>t.replace(/^\d+\.\s*/,"").replace(/\*\*/g,"").trim()).filter(t=>t.length>0&&t.length<=20).slice(0,13); }
 function price(text) { const m=text.match(/\$(\d+(?:\.\d+)?)/); return m?parseFloat(m[1]):18; }
 
+
+// Always returns a valid integer Etsy shop ID, fetching it live if not cached
+async function getEtsyShopId() {
+  if (etsyStore.shopId && parseInt(etsyStore.shopId, 10)) {
+    return parseInt(etsyStore.shopId, 10);
+  }
+  console.log("[Etsy] shopId missing — fetching from API...");
+  const d = await etsyFetch("/application/shops?limit=1");
+  if (!d?.results?.[0]) throw new Error("No Etsy shop found — make sure your shop is active");
+  etsyStore.shopId   = parseInt(d.results[0].shop_id, 10);
+  etsyStore.shopName = d.results[0].shop_name;
+  console.log("[Etsy] shopId resolved: " + etsyStore.shopId + " (" + etsyStore.shopName + ")");
+  return etsyStore.shopId;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // ETSY OAUTH
 // ════════════════════════════════════════════════════════════════════════════
@@ -269,13 +284,13 @@ app.get("/api/etsy/shop", async (req, res) => {
   if (!etsyStore.accessToken) return res.status(401).json({error:"Etsy not connected."});
   try {
     if (!etsyStore.shopId) { const d=await etsyFetch("/application/shops?limit=1"); if(d?.results?.[0]){etsyStore.shopId=parseInt(d.results[0].shop_id,10);etsyStore.shopName=d.results[0].shop_name;} }
-    res.json(await etsyFetch(`/application/shops/${etsyStore.shopId}`));
+    const sid = await getEtsyShopId(); res.json(await etsyFetch(`/application/shops/${sid}`));
   } catch(e) { res.status(500).json({error:e.message}); }
 });
 
 app.get("/api/etsy/listings", async (req, res) => {
   if (!etsyStore.accessToken) return res.status(401).json({error:"Etsy not connected."});
-  try { res.json(await etsyFetch(`/application/shops/${etsyStore.shopId}/listings?state=${req.query.state||"active"}&limit=${Math.min(parseInt(req.query.limit)||25,100)}`)); }
+  try { const lsid = await getEtsyShopId(); res.json(await etsyFetch(`/application/shops/${lsid}/listings?state=${req.query.state||"active"}&limit=${Math.min(parseInt(req.query.limit)||25,100)}`)); }
   catch(e) { res.status(500).json({error:e.message}); }
 });
 
@@ -284,8 +299,7 @@ app.post("/api/etsy/create-draft", async (req, res) => {
   const {title,description,tags:t,price:p,type} = req.body;
   if (!title||!description) return res.status(400).json({error:"Title and description required."});
   try {
-    const shopIdInt = parseInt(etsyStore.shopId, 10);
-    if (!shopIdInt) throw new Error("Shop ID not found — reconnect Etsy");
+    const shopIdInt = await getEtsyShopId();
     const l = await etsyFetch(`/application/shops/${shopIdInt}/listings`, {method:"POST",body:JSON.stringify({quantity:999,title:title.slice(0,140),description,price:parseFloat(p)||18,who_made:"i_did",when_made:"made_to_order",taxonomy_id:2078,type:type||"download",tags:(t||[]).slice(0,13),state:"draft"})});
     res.json({success:true,listingId:l.listing_id,url:l.url,state:"draft"});
   } catch(e) { res.status(500).json({error:e.message}); }
@@ -397,7 +411,8 @@ app.post("/api/printify/publish-to-etsy", async (req, res) => {
   const isPhys = ["shirt","poster","sticker"].includes(productType);
 
   try {
-    const l = await etsyFetch(`/application/shops/${etsyStore.shopId}/listings`, {
+    const shopIdInt = await getEtsyShopId();
+    const l = await etsyFetch(`/application/shops/${shopIdInt}/listings`, {
       method: "POST",
       body: JSON.stringify({
         quantity:999, title:t, description:d, price:pr,
@@ -511,7 +526,7 @@ app.post("/api/commerce/market-scan", async (req, res) => {
 app.get("/api/ledger/snapshot", async (req, res) => {
   if (!etsyStore.accessToken||!etsyStore.shopId) return res.json({connected:false,message:"Connect Etsy to populate Lunar Ledger."});
   try {
-    const [sR,dR] = await Promise.allSettled([etsyFetch(`/application/shops/${etsyStore.shopId}`),etsyFetch(`/application/shops/${etsyStore.shopId}/listings?state=draft&limit=100`)]);
+    const [sR,dR] = await Promise.allSettled([etsyFetch(`/application/shops/${etsyStore.shopId}`),etsyFetch(`/application/shops/${etsyStore.shopId||0}/listings?state=draft&limit=100`)]);
     const sh=sR.status==="fulfilled"?sR.value:null, dr=dR.status==="fulfilled"?dR.value:null;
     res.json({connected:true,shopName:etsyStore.shopName,shopId:etsyStore.shopId,connectedAt:etsyStore.connectedAt,favorites:sh?.num_favorers??"—",orders:sh?.transaction_sold_count??"—",listingCount:sh?.listing_active_count??"—",draftCount:dr?.count??0,currency:sh?.currency_code??"USD"});
   } catch(e) { res.status(500).json({error:e.message}); }
