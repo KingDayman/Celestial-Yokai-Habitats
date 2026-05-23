@@ -2285,23 +2285,26 @@ setTimeout(resize,100);
 
   /* ── Main render loop ────────────────────────────────────────────────── */
   (function loop(){
-    ctx.clearRect(0,0,W(),H());
-    drawSky();
-    drawBgCity();
-    drawGround();
-    drawStalls();
-    drawLanterns();
-    drawEmbers();
-    drawPapers();
-    drawForgeSpks();
-    drawSigils();
-    drawNPCs();
-    drawScroll();
-    drawFox();
+    try{ctx.clearRect(0,0,W(),H());}catch(e){}
+    try{drawSky();}catch(e){console.error('[habitat] drawSky:',e.message);}
+    try{drawBgCity();}catch(e){console.error('[habitat] drawBgCity:',e.message);}
+    try{drawGround();}catch(e){console.error('[habitat] drawGround:',e.message);}
+    try{drawStalls();}catch(e){console.error('[habitat] drawStalls:',e.message);}
+    try{drawLanterns();}catch(e){console.error('[habitat] drawLanterns:',e.message);}
+    try{drawEmbers();}catch(e){}
+    try{drawPapers();}catch(e){}
+    try{drawForgeSpks();}catch(e){}
+    try{drawSigils();}catch(e){}
+    try{drawNPCs();}catch(e){}
+    try{drawScroll();}catch(e){}
+    // PROBE: white circle proves loop reaches drawFox
+    ctx.fillStyle='rgba(255,255,255,0.9)';ctx.beginPath();ctx.arc(30,30,10,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,100,0,0.9)';ctx.beginPath();ctx.arc(60,30,10,0,Math.PI*2);ctx.fill();
+    try{drawFox();}catch(e){console.error('[habitat] drawFox:',e.message,e.stack);}
     tick++;
-    updateFox();
-    updateDecay();
-    spawnAmbient();
+    try{updateFox();}catch(e){}
+    try{updateDecay();}catch(e){}
+    try{spawnAmbient();}catch(e){}
     requestAnimationFrame(loop);
   })();
 }
