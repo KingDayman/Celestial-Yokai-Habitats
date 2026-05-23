@@ -367,37 +367,77 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
 .hab-lan span{font-size:5.5px;color:rgba(232,201,122,0.65);margin-top:2px;font-family:serif}
 @keyframes lan-sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
 
-/* ── Stalls ── */
-.hab-stalls{position:absolute;bottom:28%;left:0;right:0;height:32%}
-.hab-stall{position:absolute;bottom:0;width:20%;display:flex;flex-direction:column;align-items:center;gap:3px}
-.hab-stall::before{content:'';position:absolute;bottom:0;left:0;right:0;height:88%;
-  background:linear-gradient(160deg,rgba(45,15,90,0.9),rgba(28,10,60,0.95));
-  border-top:2px solid rgba(232,201,122,0.4);
-  clip-path:polygon(8% 100%,92% 100%,100% 0%,0% 0%);
-  box-shadow:inset 0 0 12px rgba(155,92,246,0.1)}
-.hab-stall::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;
-  background:linear-gradient(90deg,transparent,rgba(232,201,122,0.6),transparent)}
-.hab-stall-orb{width:12px;height:12px;border-radius:50%;background:var(--c);
-  box-shadow:0 0 10px var(--c),0 0 20px var(--c),0 0 40px color-mix(in srgb,var(--c) 30%,transparent);
-  position:relative;z-index:2;
-  animation:orb-float 2.5s ease-in-out infinite}
-@keyframes orb-float{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-6px) scale(1.1)}}
-.hab-stall span{font-family:'Share Tech Mono',monospace;font-size:5px;color:rgba(232,201,122,0.65);
-  position:relative;z-index:2;letter-spacing:0.1em}
+/* ── Stalls — real market booth structure ── */
+.hab-stalls{position:absolute;bottom:28%;left:0;right:0;height:40%}
+.hab-stall{position:absolute;bottom:0;width:22%;height:100%}
+/* Canopy / awning */
+.stall-canopy{position:absolute;top:0;left:0;right:0;height:28%;
+  background:linear-gradient(180deg,var(--sc) 0%,var(--sl) 100%);
+  clip-path:polygon(0% 100%,100% 100%,96% 0%,4% 0%);
+  box-shadow:0 2px 8px rgba(0,0,0,0.4),0 0 12px color-mix(in srgb,var(--sc) 40%,transparent);
+  z-index:3}
+.stall-fringe{position:absolute;bottom:-4px;left:0;right:0;height:8px;
+  background:repeating-linear-gradient(90deg,var(--sc) 0px,var(--sc) 6px,transparent 6px,transparent 9px);
+  opacity:0.85}
+/* Counter surface */
+.stall-counter{position:absolute;top:28%;left:3%;right:3%;height:18%;
+  background:linear-gradient(180deg,rgba(50,25,90,0.95),rgba(30,12,60,0.95));
+  border:1px solid var(--sc);border-opacity:0.5;
+  display:flex;align-items:center;justify-content:space-around;padding:0 4px;
+  box-shadow:0 0 8px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.05)}
+/* Items on counter */
+.stall-good{width:7px;height:7px;border-radius:50%;
+  background:var(--sc);box-shadow:0 0 6px var(--sc);
+  animation:good-glow 2s ease-in-out infinite}
+.stall-good.g2{animation-delay:0.6s;opacity:0.75;width:5px;height:5px}
+.stall-good.g3{animation-delay:1.2s;opacity:0.5;width:4px;height:9px;border-radius:2px}
+@keyframes good-glow{0%,100%{transform:scale(1)}50%{transform:scale(1.2);box-shadow:0 0 10px var(--sc)}}
+/* Back wall */
+.stall-post{position:absolute;top:28%;width:4%;bottom:0;
+  background:linear-gradient(180deg,rgba(38,18,72,0.95),rgba(22,8,45,0.95));
+  border:1px solid rgba(232,201,122,0.15)}
+.stall-post-l{left:0}
+.stall-post-r{right:0}
+/* Back wall fill */
+.stall-post::before{content:'';position:absolute;top:0;left:100%;
+  width:calc(var(--wall-w,900%));height:100%;
+  background:linear-gradient(180deg,rgba(35,15,68,0.92),rgba(20,8,42,0.95));
+  border:1px solid rgba(232,201,122,0.1)}
+.stall-post-l::before{width:800%;left:100%}
+.stall-post-r::before{display:none}
+/* Stall name */
+.stall-name{position:absolute;bottom:3px;left:0;right:0;text-align:center;
+  font-family:'Share Tech Mono',monospace;font-size:5px;color:rgba(232,201,122,0.7);
+  letter-spacing:0.12em;z-index:4}
+/* Under-canopy light glow */
+.stall-light{position:absolute;top:26%;left:10%;right:10%;height:4px;
+  background:radial-gradient(ellipse,var(--sc),transparent);
+  opacity:0.4;filter:blur(2px)}
 
 /* ═══ KITSARI CHARACTER ═══════════════════════════════════════════════ */
-.hab-kitsari{position:absolute;bottom:28%;width:46px;height:78px;
-  animation:kits-walk 12s linear infinite;transform-origin:bottom center;
-  filter:drop-shadow(0 4px 8px rgba(88,28,135,0.5))}
+.hab-kitsari{position:absolute;bottom:28%;width:50px;height:84px;
+  animation:kits-walk 14s linear infinite;transform-origin:bottom center;
+  filter:drop-shadow(0 4px 12px rgba(88,28,135,0.7))}
+.kits-svg{width:100%;height:100%}
+.kits-svg-tail{animation:tail-sway 2.4s ease-in-out infinite;transform-origin:28px 62px}
+.kits-sigil-ring{animation:sigil-pulse 2.5s ease-in-out infinite}
 @keyframes kits-walk{
-  0%   {left:5%; transform:scaleX(1)}
-  6%   {left:5%; transform:scaleX(1)}
-  36%  {left:40%;transform:scaleX(1)}
-  39%  {left:43%;transform:scaleX(-1)}
-  69%  {left:74%;transform:scaleX(-1)}
-  72%  {left:71%;transform:scaleX(1)}
-  94%  {left:5%; transform:scaleX(1)}
-  100% {left:5%; transform:scaleX(1)}
+  0%   {left:5%; transform:scaleX(1)}   /* Start at SCROLLS */
+  8%   {left:5%; transform:scaleX(1)}   /* Pause at SCROLLS */
+  16%  {left:29%;transform:scaleX(1)}   /* Walk to PRINTS */
+  24%  {left:29%;transform:scaleX(1)}   /* Pause at PRINTS */
+  32%  {left:54%;transform:scaleX(1)}   /* Walk to CHARMS */
+  40%  {left:54%;transform:scaleX(1)}   /* Pause at CHARMS */
+  48%  {left:76%;transform:scaleX(1)}   /* Walk to RELICS */
+  56%  {left:76%;transform:scaleX(1)}   /* Pause at RELICS */
+  58%  {left:76%;transform:scaleX(-1)}  /* Turn around */
+  66%  {left:54%;transform:scaleX(-1)}  /* Walk back to CHARMS */
+  68%  {left:52%;transform:scaleX(-1)}  /* Pause */
+  76%  {left:29%;transform:scaleX(-1)}  /* Walk back to PRINTS */
+  78%  {left:27%;transform:scaleX(-1)}  /* Pause */
+  86%  {left:5%; transform:scaleX(-1)}  /* Walk back to SCROLLS */
+  88%  {left:5%; transform:scaleX(1)}   /* Turn to face right */
+  100% {left:5%; transform:scaleX(1)}   /* Loop */
 }
 .hab-kitsari.forging{animation:kits-forge 1.2s ease-in-out infinite alternate;position:absolute;left:38%}
 .hab-kitsari.celebrating{animation:kits-cel 0.4s ease-in-out infinite alternate;position:absolute;left:48%}
@@ -601,34 +641,138 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
         <div class="hab-lan" style="left:74%;animation-delay:0.2s"><span>商</span></div>
         <div class="hab-lan" style="left:86%;animation-delay:0.9s"><span>法</span></div>
       </div>
-      <!-- Market stalls -->
+      <!-- Market stalls — real canopy structure -->
       <div class="hab-stalls">
-        <div class="hab-stall" style="left:5%"><div class="hab-stall-orb" style="--c:#c084fc"></div><span>SCROLLS</span></div>
-        <div class="hab-stall" style="left:28%"><div class="hab-stall-orb" style="--c:#e8c97a"></div><span>PRINTS</span></div>
-        <div class="hab-stall" style="left:53%"><div class="hab-stall-orb" style="--c:#67e8f9"></div><span>CHARMS</span></div>
-        <div class="hab-stall" style="left:74%"><div class="hab-stall-orb" style="--c:#4ade80"></div><span>RELICS</span></div>
+        <!-- SCROLLS stall -->
+        <div class="hab-stall" style="--sc:#c084fc;--sl:#8b5cf6;left:3%" id="stall-0">
+          <div class="stall-canopy"><div class="stall-fringe"></div></div>
+          <div class="stall-counter">
+            <div class="stall-good g1"></div>
+            <div class="stall-good g2"></div>
+            <div class="stall-good g3"></div>
+          </div>
+          <div class="stall-post stall-post-l"></div>
+          <div class="stall-post stall-post-r"></div>
+          <div class="stall-name">SCROLLS</div>
+          <div class="stall-light"></div>
+        </div>
+        <!-- PRINTS stall -->
+        <div class="hab-stall" style="--sc:#e8c97a;--sl:#b8962a;left:27%" id="stall-1">
+          <div class="stall-canopy"><div class="stall-fringe"></div></div>
+          <div class="stall-counter">
+            <div class="stall-good g1"></div>
+            <div class="stall-good g2"></div>
+            <div class="stall-good g3"></div>
+          </div>
+          <div class="stall-post stall-post-l"></div>
+          <div class="stall-post stall-post-r"></div>
+          <div class="stall-name">PRINTS</div>
+          <div class="stall-light"></div>
+        </div>
+        <!-- CHARMS stall -->
+        <div class="hab-stall" style="--sc:#67e8f9;--sl:#0891b2;left:52%" id="stall-2">
+          <div class="stall-canopy"><div class="stall-fringe"></div></div>
+          <div class="stall-counter">
+            <div class="stall-good g1"></div>
+            <div class="stall-good g2"></div>
+            <div class="stall-good g3"></div>
+          </div>
+          <div class="stall-post stall-post-l"></div>
+          <div class="stall-post stall-post-r"></div>
+          <div class="stall-name">CHARMS</div>
+          <div class="stall-light"></div>
+        </div>
+        <!-- RELICS stall -->
+        <div class="hab-stall" style="--sc:#4ade80;--sl:#15803d;left:74%" id="stall-3">
+          <div class="stall-canopy"><div class="stall-fringe"></div></div>
+          <div class="stall-counter">
+            <div class="stall-good g1"></div>
+            <div class="stall-good g2"></div>
+            <div class="stall-good g3"></div>
+          </div>
+          <div class="stall-post stall-post-l"></div>
+          <div class="stall-post stall-post-r"></div>
+          <div class="stall-name">RELICS</div>
+          <div class="stall-light"></div>
+        </div>
       </div>
-      <!-- Kitsari NPC -->
+
+      <!-- Kitsari — SVG character, IP-accurate -->
       <div class="hab-kitsari" id="hab-kitsari">
         <div class="kits-spirit-l"></div>
         <div class="kits-spirit-r"></div>
-        <div class="kits-body">
-          <div class="kits-tail"></div>
-          <div class="kits-robe">
-            <div class="kits-cord"></div>
-            <div class="kits-chest-fur"></div>
-          </div>
-          <div class="kits-head">
-            <div class="kits-ear kits-ear-l"><div class="kits-ear-inner"></div><div class="kits-earring"></div></div>
-            <div class="kits-ear kits-ear-r"><div class="kits-ear-inner"></div></div>
-            <div class="kits-face">
-              <div class="kits-sigil"></div>
-              <div class="kits-eye-wrap"><div class="kits-eye"></div></div>
-              <div class="kits-muzzle"></div>
-            </div>
-          </div>
-          <div class="kits-charm">☽</div>
-        </div>
+        <svg class="kits-svg" viewBox="0 0 60 90" xmlns="http://www.w3.org/2000/svg">
+          <!-- Tail -->
+          <ellipse cx="14" cy="62" rx="18" ry="14" fill="rgba(252,250,255,0.95)" stroke="rgba(200,180,255,0.4)" stroke-width="0.8" class="kits-svg-tail"/>
+          <circle cx="8" cy="70" r="5" fill="none" stroke="rgba(155,92,246,0.75)" stroke-width="1.2" stroke-dasharray="8 4"/>
+          <!-- Dark robe body -->
+          <path d="M18 88 L14 50 L22 44 L38 44 L46 50 L42 88 Z" fill="#1a0d30"/>
+          <path d="M20 88 L18 55 L28 50 L32 50 L42 55 L40 88 Z" fill="#2d1060" opacity="0.5"/>
+          <!-- Gold braided cord -->
+          <line x1="30" y1="44" x2="30" y2="72" stroke="#c9922a" stroke-width="1.5" stroke-dasharray="3 2"/>
+          <circle cx="30" cy="60" r="4" fill="none" stroke="#e8c97a" stroke-width="1.2"/>
+          <!-- Star pattern on robe -->
+          <text x="22" y="56" font-size="5" fill="rgba(232,201,122,0.35)" text-anchor="middle">✦</text>
+          <text x="36" y="68" font-size="4" fill="rgba(232,201,122,0.25)" text-anchor="middle">☽</text>
+          <!-- Chest fur -->
+          <ellipse cx="30" cy="46" rx="9" ry="6" fill="rgba(255,253,255,0.96)"/>
+          <!-- Left paw -->
+          <ellipse cx="16" cy="76" rx="5" ry="3.5" fill="rgba(248,244,255,0.9)" transform="rotate(-15,16,76)"/>
+          <!-- Right paw -->
+          <ellipse cx="44" cy="76" rx="5" ry="3.5" fill="rgba(248,244,255,0.9)" transform="rotate(15,44,76)"/>
+          <!-- Moon charm cord -->
+          <line x1="46" y1="50" x2="48" y2="62" stroke="#b87820" stroke-width="0.8"/>
+          <rect x="44" y="62" width="9" height="7" rx="1" fill="#12072a" stroke="#e8c97a" stroke-width="0.8"/>
+          <text x="48.5" y="68" font-size="4" fill="rgba(232,201,122,0.9)" text-anchor="middle">☽</text>
+          <!-- HEAD GROUP -->
+          <!-- Left ear — outer white -->
+          <polygon points="16,18 10,2 22,14" fill="rgba(252,248,255,0.97)"/>
+          <!-- Left ear — inner dark -->
+          <polygon points="16,17 11,5 21,15" fill="#0d0418"/>
+          <!-- Right ear — outer white -->
+          <polygon points="38,16 44,0 32,12" fill="rgba(252,248,255,0.97)"/>
+          <!-- Right ear — inner dark -->
+          <polygon points="38,15 43,3 33,13" fill="#0d0418"/>
+          <!-- Earring on left -->
+          <circle cx="12" cy="20" r="3" fill="none" stroke="#e8c97a" stroke-width="1.2"/>
+          <!-- 天狐 tag -->
+          <rect x="5" y="23" width="12" height="9" rx="1" fill="#12072a" stroke="#e8c97a" stroke-width="0.8"/>
+          <text x="11" y="30" font-size="4" fill="rgba(232,201,122,0.9)" text-anchor="middle" font-family="serif">天狐</text>
+          <!-- White face/head -->
+          <ellipse cx="30" cy="26" rx="16" ry="15" fill="rgba(252,248,255,0.97)"/>
+          <!-- Muzzle -->
+          <ellipse cx="36" cy="32" rx="9" ry="7" fill="rgba(246,241,255,0.95)"/>
+          <!-- Nose -->
+          <ellipse cx="40" cy="30" r="2.5" rx="2.5" ry="1.8" fill="#1e0838"/>
+          <!-- Mouth lines -->
+          <path d="M38 32 Q41 35 44 33" fill="none" stroke="#2d1048" stroke-width="0.8" stroke-linecap="round"/>
+          <!-- Forehead sigil — circle -->
+          <circle cx="27" cy="18" r="5.5" fill="none" stroke="rgba(155,92,246,0.9)" stroke-width="1.4" class="kits-sigil-ring"/>
+          <circle cx="27" cy="18" r="2.2" fill="none" stroke="rgba(155,92,246,0.85)" stroke-width="1"/>
+          <!-- Sigil rays -->
+          <line x1="27" y1="11" x2="27" y2="13.5" stroke="rgba(155,92,246,0.8)" stroke-width="1" stroke-linecap="round"/>
+          <line x1="27" y1="22.5" x2="27" y2="25" stroke="rgba(155,92,246,0.8)" stroke-width="1" stroke-linecap="round"/>
+          <line x1="20.5" y1="18" x2="23" y2="18" stroke="rgba(155,92,246,0.8)" stroke-width="1" stroke-linecap="round"/>
+          <line x1="31" y1="18" x2="33.5" y2="18" stroke="rgba(155,92,246,0.8)" stroke-width="1" stroke-linecap="round"/>
+          <!-- Under-eye marking -->
+          <path d="M33 28 Q36 31 38 29" fill="none" stroke="rgba(155,92,246,0.7)" stroke-width="1" stroke-linecap="round"/>
+          <!-- Eye socket -->
+          <ellipse cx="35" cy="25" rx="6" ry="4.5" fill="rgba(10,2,22,0.92)"/>
+          <!-- Purple iris -->
+          <ellipse cx="35" cy="25" rx="4.5" ry="4" fill="url(#eye-grad)"/>
+          <!-- Pupil -->
+          <ellipse cx="35.5" cy="25" rx="1.8" ry="3.2" fill="#060010"/>
+          <!-- Eye shine -->
+          <circle cx="37" cy="23" r="1.2" fill="rgba(255,255,255,0.9)"/>
+          <!-- Gradient def -->
+          <defs>
+            <radialGradient id="eye-grad" cx="35%" cy="30%">
+              <stop offset="0%" stop-color="rgba(230,200,255,1)"/>
+              <stop offset="45%" stop-color="rgba(155,92,246,0.95)"/>
+              <stop offset="100%" stop-color="rgba(55,8,110,0.9)"/>
+            </radialGradient>
+          </defs>
+        </svg>
       </div>
       <!-- Embers -->
       <div class="hab-embers">
