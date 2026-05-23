@@ -428,39 +428,54 @@ app.post("/api/printify/publish-to-etsy", async (req, res) => {
   const d  = sec(aiDraft,"DESCRIPTION")||t;
   const tg = tags(aiDraft);
   const pr = price(aiDraft)||18;
-  const isPhys = ["shirt","poster","sticker"].includes(productType);
+  // Physical listings need a shipping_profile_id — fetch the shop's first one
+  // If none exist, fall back to digital/download type (no shipping needed)
+  let shippingProfileId = null;
+  let listingType = "download";
+  let taxonomyId = 2078; // Digital art
+
+  if (["shirt","poster","sticker"].includes(productType)) {
+    try {
+      const shopIdForShipping = await getEtsyShopId();
+      const sp = await etsyFetch(`/application/shops/${shopIdForShipping}/shipping-profiles`);
+      const profiles = sp?.results || sp || [];
+      if (Array.isArray(profiles) && profiles.length > 0) {
+        shippingProfileId = profiles[0].shipping_profile_id;
+        listingType = "physical";
+        taxonomyId = 68887794;
+        console.log("[Etsy] Using shipping_profile_id:", shippingProfileId);
+      } else {
+        console.log("[Etsy] No shipping profiles found — creating as download type");
+      }
+    } catch(spErr) {
+      console.warn("[Etsy] Could not fetch shipping profiles:", spErr.message, "— falling back to download type");
+    }
+  }
 
   try {
     const shopIdInt = await getEtsyShopId();
+
+    const payload = {
+      quantity: 999, title: t, description: d, price: pr,
+      who_made: "i_did", when_made: "made_to_order",
+      taxonomy_id: taxonomyId,
+      type: listingType,
+      tags: tg, state: "draft",
+    };
+    if (shippingProfileId) payload.shipping_profile_id = shippingProfileId;
+
+    console.log("[Etsy] Creating listing — type:", listingType, "shipping_profile_id:", shippingProfileId || "none");
     const l = await etsyFetch(`/application/shops/${shopIdInt}/listings`, {
       method: "POST",
-      body: JSON.stringify({
-        quantity:999, title:t, description:d, price:pr,
-        who_made:"i_did", when_made:"made_to_order",
-        taxonomy_id: isPhys ? 68887794 : 2078,
-        type: isPhys ? "physical" : "download",
-        tags: tg, state: "draft",
-      }),
+      body: JSON.stringify(payload),
     });
     res.json({success:true, listingId:l.listing_id, etsyUrl:l.url,
       printifyProductId:printifyProductId||null, state:"draft",
-      tagCount:tg.length, publishLocked:"Publishing locked until quality/compliance verified."});
+      tagCount:tg.length, listingType,
+      publishLocked:"Publishing locked until quality/compliance verified."});
   } catch(e) {
     console.error("[publish-to-etsy] FAILED:", e.message);
-    // Return the diagnostic info alongside the error so it shows in the UI
-    res.status(500).json({
-      error: e.message,
-      debug: {
-        hasApiKey:         !!ETSY_API_KEY,
-        hasSharedSecret:   !!ETSY_SECRET,
-        usingApiKeyAsHeader: (ETSY_API_KEY||"").slice(0,4),
-        NOT_USING_SHARED_SECRET: true,
-        apiKeyLen:    (ETSY_API_KEY||"").length,
-        secretLen:    (ETSY_SECRET||"").length,
-        keysAreSwapped: ETSY_API_KEY === ETSY_SECRET,
-        fix: "In Railway variables: ETSY_API_KEY = keystring (shorter), ETSY_SHARED_SECRET = shared secret (longer). If lengths seem wrong, they are swapped.",
-      },
-    });
+    res.status(500).json({ error: e.message });
   }
 });
 
