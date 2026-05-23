@@ -1930,7 +1930,8 @@ function initHabitat(){
 
 // KITSARI DRAW REPLACEMENT — inject into initHabitat replacing drawFox + updateFox
 
-function drawFox(){
+  function drawFox(){
+    // Uses closure: ctx, W, H, tick, fox, etsyConnected, STALLS
   const w=W(),h=H();
   // Scale: Kitsari is ~90px tall on a 250px canvas, proportional on mobile
   const scale = h / 250;
@@ -2295,7 +2296,7 @@ function drawFox(){
   ctx.restore();
 }
 
-function drawSpritFlame(ctx, x, y, size, phase){
+  function drawSpritFlame(ctx, x, y, size, phase){
   // Animated spirit flame — purple/lavender wisps
   ctx.save();
   const a1 = 0.5 + Math.sin(phase)*0.3;
