@@ -358,7 +358,7 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
   <!-- HABITAT -->
   <div class="hab-wrap">
     <div class="hc-box">
-      <canvas id="habitat-canvas"></canvas>
+      <canvas id="habitat-canvas" width="363" height="210"></canvas>
       <div class="hc-ot"></div><div class="hc-ob"></div>
       <div class="hc-lbl">KITSARI // LANTERN DISTRICT MARKET // NIGHT MARKET ACTIVE</div>
       <div class="hc-stat"><span class="hc-dot"></span><span class="hc-txt">MARKET OPEN</span></div>
@@ -1582,8 +1582,16 @@ function initHabitat(){
   const hcTxt=document.getElementById('hc-txt');
   try{
   const cont=c.parentElement;
-  function resize(){c.width=cont.offsetWidth||363;c.height=cont.offsetHeight||210;buildCity();}
-setTimeout(resize,100);
+  function resize(){
+    const w=cont.offsetWidth||363;
+    const h=cont.offsetHeight||210;
+    c.width=w; c.height=h;
+    buildCity();
+    console.log('[habitat] canvas sized: '+w+'x'+h);
+  }
+  // Run resize after paint
+  if(document.readyState==='complete'){resize();}else{window.addEventListener('load',resize);}
+  setTimeout(resize,50); setTimeout(resize,200);
   resize();addEventListener('resize',resize);
   const W=()=>c.width,H=()=>c.height;
   let tick=0;
