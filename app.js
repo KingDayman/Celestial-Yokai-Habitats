@@ -411,72 +411,56 @@ app.post("/api/printify/create-product", async (req, res) => {
 });
 
 app.post("/api/printify/publish-to-etsy", async (req, res) => {
-  if (!etsyStore.accessToken) return res.status(401).json({error:"Etsy not connected."});
-
-  // ── Header diagnostics — logged on every sync attempt ──────────────────
-  const apiKeyPreview    = (ETSY_API_KEY    || "").slice(0,4) + "..." + (ETSY_API_KEY    || "").slice(-4);
-  const secretPreview    = (ETSY_SECRET     || "").slice(0,4) + "..." + (ETSY_SECRET     || "").slice(-4);
-  const tokenPreview     = (etsyStore.accessToken || "").slice(0,6) + "...";
-  console.log("[publish-to-etsy] Header check:");
-  console.log("  x-api-key will use ETSY_API_KEY  :", apiKeyPreview, "len=" + (ETSY_API_KEY||"").length);
-  console.log("  ETSY_SHARED_SECRET (NOT in header):", secretPreview, "len=" + (ETSY_SECRET||"").length);
-  console.log("  Authorization Bearer token starts :", tokenPreview);
-  console.log("  Keys match (would be swapped)?     :", ETSY_API_KEY === ETSY_SECRET ? "YES — IDENTICAL, PROBLEM" : "no — different values, good");
-
-  const {printifyProductId,productType,aiDraft=""} = req.body;
-  const t  = (sec(aiDraft,"ETSY SEO TITLE")||"Celestial Yokai Product").replace(/\*\*/g,"").trim().slice(0,140);
-  const d  = sec(aiDraft,"DESCRIPTION")||t;
-  const tg = tags(aiDraft);
-  const pr = price(aiDraft)||18;
-  // Physical listings need a shipping_profile_id — fetch the shop's first one
-  // If none exist, fall back to digital/download type (no shipping needed)
-  let shippingProfileId = null;
-  let listingType = "download";
-  let taxonomyId = 2078; // Digital art
-
-  if (["shirt","poster","sticker"].includes(productType)) {
-    try {
-      const shopIdForShipping = await getEtsyShopId();
-      const sp = await etsyFetch(`/application/shops/${shopIdForShipping}/shipping-profiles`);
-      const profiles = sp?.results || sp || [];
-      if (Array.isArray(profiles) && profiles.length > 0) {
-        shippingProfileId = profiles[0].shipping_profile_id;
-        listingType = "physical";
-        taxonomyId = 68887794;
-        console.log("[Etsy] Using shipping_profile_id:", shippingProfileId);
-      } else {
-        console.log("[Etsy] No shipping profiles found — creating as download type");
-      }
-    } catch(spErr) {
-      console.warn("[Etsy] Could not fetch shipping profiles:", spErr.message, "— falling back to download type");
-    }
-  }
+  const { printifyProductId } = req.body;
+  if (!printifyProductId) return res.status(400).json({ error: "printifyProductId required" });
 
   try {
-    const shopIdInt = await getEtsyShopId();
+    const shopId = await getPrintifyShopId();
+    console.log("[Printify→Etsy] Publishing product", printifyProductId, "from shop", shopId);
 
-    const payload = {
-      quantity: 999, title: t, description: d, price: pr,
-      who_made: "i_did", when_made: "made_to_order",
-      taxonomy_id: taxonomyId,
-      type: listingType,
-      tags: tg, state: "draft",
-    };
-    if (shippingProfileId) payload.shipping_profile_id = shippingProfileId;
+    // Use Printify's native publish endpoint — creates a real physical Etsy listing
+    // with Printify fulfillment, mockup images, and all variants attached automatically.
+    // Printify must be connected to the Etsy store in the Printify dashboard first.
+    const result = await printifyFetch(
+      `/shops/${shopId}/products/${printifyProductId}/publishing.json`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          title:       true,
+          description: true,
+          images:      true,
+          variants:    true,
+          tags:        true,
+          keyFeatures: true,
+          shipping_template: true,
+        }),
+      }
+    );
 
-    console.log("[Etsy] Creating listing — type:", listingType, "shipping_profile_id:", shippingProfileId || "none");
-    const l = await etsyFetch(`/application/shops/${shopIdInt}/listings`, {
-      method: "POST",
-      body: JSON.stringify(payload),
+    console.log("[Printify→Etsy] Publish result:", JSON.stringify(result).slice(0, 300));
+    res.json({
+      success: true,
+      printifyProductId,
+      result,
+      note: "Product published to Etsy via Printify. Check your Etsy shop manager for the draft listing.",
+      publishLocked: "Listing created as draft. Review in Etsy shop manager before going live.",
     });
-    res.json({success:true, listingId:l.listing_id, etsyUrl:l.url,
-      printifyProductId:printifyProductId||null, state:"draft",
-      tagCount:tg.length, listingType,
-      publishLocked:"Publishing locked until quality/compliance verified."});
+
   } catch(e) {
-    console.error("[publish-to-etsy] FAILED:", e.message);
-    res.status(500).json({ error: e.message });
+    console.error("[Printify→Etsy] FAILED:", e.message);
+
+    // If Printify→Etsy publish fails, it likely means Printify is not connected to
+    // the Etsy store in the Printify dashboard. Provide clear instructions.
+    const notConnected = e.message.includes("401") || e.message.includes("403") || e.message.includes("not connected") || e.message.includes("shop");
+    res.status(500).json({
+      error: e.message,
+      fix: notConnected
+        ? "Connect Printify to your Etsy store: Printify dashboard → My Stores → Add a new store → Choose Etsy → Authorize. Then retry."
+        : "Check Railway logs for details.",
+    });
   }
+});
+
 });
 
 // ════════════════════════════════════════════════════════════════════════════
