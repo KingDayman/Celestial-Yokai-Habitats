@@ -1594,7 +1594,7 @@ function initHabitat(){
     marketEvent=type;marketEventTicks=90;
     if(type==='draft'){fox.targetStall=Math.floor(Math.random()*STALLS.length);fox.goalMode='forge';}
     if(type==='upload'){spawnForge();}
-    if(type==='etsy'){districtBrightness=Math.min(2,districtBrightness+.25);spawnSigil();if(fox.state!=='forge')fox.state='celebrate';}
+    if(type==='etsy'){districtBrightness=Math.min(2,districtBrightness+.25);spawnSigil();fox.state='celebrate';fox.timer=0;if(window._stageAnim)window._stageAnim(5);}
     if(type==='sale'){busyness=1;districtBrightness=Math.min(2,districtBrightness+.4);fox.state='celebrate';}
     STALLS.forEach((_,i)=>{stallActivityMap[i]=(stallActivityMap[i]||0)+.6;});
     habFlashDOM(type);
@@ -1927,105 +1927,406 @@ function initHabitat(){
   }
 
   /* ── Draw: Kitsari fox NPC ───────────────────────────────────────────── */
-  function drawFox(){
-    const w=W(),h=H(),fw=22,fh=20;
-    const fx=Math.round(fox.x*w-fw/2),fy=Math.round(fox.y*h-fh);
-    const d=fox.dir;
-    fox.breathPhase+=.025;
-    const breathBob=(fox.state==='stall'||fox.state==='forge'||fox.state==='sit')?Math.sin(fox.breathPhase)*1.2:0;
-    const walkBob=(fox.state==='walk')?Math.sin(fox.frame*.8)*1.8:0;
-    const bob=breathBob+walkBob;
 
-    ctx.save();
-    if(d===-1){ctx.translate(fx+fw,fy);ctx.scale(-1,1);}else ctx.translate(fx,fy);
+// KITSARI DRAW REPLACEMENT — inject into initHabitat replacing drawFox + updateFox
 
-    // Tail
-    const ts=(fox.state==='celebrate')?Math.sin(tick*.12)*12:Math.sin(tick*.04+fox.tail)*8;
-    const tg=ctx.createRadialGradient(-4+ts,fh*.42+bob,0,-4+ts,fh*.42+bob,14);
-    tg.addColorStop(0,'rgba(192,132,252,.9)');tg.addColorStop(.65,'rgba(139,92,246,.55)');tg.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=tg;ctx.beginPath();ctx.ellipse(-4+ts,fh*.42+bob,14,9,Math.PI*.2,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='rgba(242,232,255,.7)';ctx.beginPath();ctx.arc(-4+ts+4,fh*.42-2+bob,4,0,Math.PI*2);ctx.fill();
+function drawFox(){
+  const w=W(),h=H();
+  // Scale: Kitsari is ~90px tall on a 250px canvas, proportional on mobile
+  const scale = h / 250;
+  const S = (n) => n * scale;
 
-    // Body
-    ctx.fillStyle='rgba(238,226,255,.95)';ctx.fillRect(2,7+bob,14,10);
-    ctx.fillStyle='rgba(40,10,82,.82)';ctx.fillRect(2,10+bob,14,7);
-    ctx.fillStyle='rgba(232,201,122,.6)';ctx.fillRect(2,10+bob,14,1.5);
-    ctx.fillStyle='rgba(155,92,246,.2)';ctx.fillRect(5,12+bob,4,3);ctx.fillRect(10,12+bob,3,3);
+  // Position — fox.x/fox.y are 0..1 fractions
+  const cx = fox.x * w;
+  const cy = fox.y * h;
 
-    // Head
-    ctx.fillStyle='rgba(242,232,255,.97)';ctx.beginPath();ctx.arc(10,4+bob,7,0,Math.PI*2);ctx.fill();
+  fox.breathPhase += 0.022;
+  const breath = Math.sin(fox.breathPhase) * S(1.8);
+  const walkBob = fox.state==='walk' ? Math.sin(fox.frame * 0.7) * S(2.2) : 0;
+  const bob = breath + walkBob;
 
-    // Ears
-    ctx.fillStyle='rgba(242,232,255,.92)';
-    ctx.beginPath();ctx.moveTo(4,1+bob);ctx.lineTo(2,-5+bob);ctx.lineTo(8,.5+bob);ctx.fill();
-    ctx.beginPath();ctx.moveTo(16,1+bob);ctx.lineTo(18,-5+bob);ctx.lineTo(12,.5+bob);ctx.fill();
-    ctx.fillStyle='rgba(155,92,246,.55)';
-    ctx.beginPath();ctx.moveTo(4.5,.5+bob);ctx.lineTo(3,-3.5+bob);ctx.lineTo(7.5,.5+bob);ctx.fill();
-    ctx.beginPath();ctx.moveTo(15.5,.5+bob);ctx.lineTo(17,-3.5+bob);ctx.lineTo(12.5,.5+bob);ctx.fill();
-    ctx.fillStyle='rgba(232,201,122,.7)';
-    ctx.beginPath();ctx.arc(2.5,-4.5+bob,.8,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.arc(17.5,-4.5+bob,.8,0,Math.PI*2);ctx.fill();
+  // Tail sway
+  fox.tail += 0.025;
+  const tailSwing = fox.state==='celebrate'
+    ? Math.sin(tick * 0.12) * S(14)
+    : Math.sin(fox.tail) * S(8);
 
-    // Eyes
-    const ex=d===1?12.5:7.5;
-    if(fox.state==='sleep'){
-      ctx.strokeStyle='rgba(192,132,252,.6)';ctx.lineWidth=1.2;
-      ctx.beginPath();ctx.arc(ex,4.5+bob,2,Math.PI*.05,Math.PI*.95);ctx.stroke();
-      ctx.fillStyle='rgba(192,132,252,.4)';ctx.font='5px sans-serif';ctx.textAlign='center';ctx.fillText('z',ex+5,bob-2);
-    } else if(fox.state==='celebrate'){
-      ctx.fillStyle='rgba(232,201,122,.95)';ctx.font='6px serif';ctx.textAlign='center';ctx.fillText('★',ex,5+bob);
-    } else {
-      ctx.fillStyle='rgba(192,132,252,.95)';ctx.beginPath();ctx.ellipse(ex,4.5+bob,2.2,1.1,0,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='rgba(25,3,55,.95)';ctx.beginPath();ctx.arc(ex+.3,4.5+bob,1.2,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='rgba(255,255,255,.85)';ctx.beginPath();ctx.arc(ex+.9,3.8+bob,.5,0,Math.PI*2);ctx.fill();
-    }
+  // Spirit flame flicker
+  const flamePhase = tick * 0.06;
 
-    // Forehead rune
-    const rc=etsyConnected?'rgba(232,201,122,':'rgba(192,132,252,';
-    const runeA=fox.state==='forge'?(.7+Math.sin(tick*.15)*.3):(.42+Math.sin(tick*.05)*.22);
-    ctx.fillStyle=rc+runeA+')';ctx.font='5px serif';ctx.textAlign='center';ctx.fillText('✦',10,1+bob);
+  ctx.save();
+  // Flip direction
+  if(fox.dir === -1){ ctx.translate(cx, cy); ctx.scale(-1,1); ctx.translate(-cx, -cy); }
 
-    // Legs
-    if(fox.state==='walk'){
-      const ls=Math.sin(fox.frame*.62)*1.1;
-      ctx.fillStyle='rgba(238,226,255,.8)';
-      ctx.fillRect(3+ls,17+bob,3.5,4.5);ctx.fillRect(11-ls,17+bob,3.5,4.5);
-      ctx.fillRect(4-ls*.4,15+bob,2.5,3);ctx.fillRect(12+ls*.4,15+bob,2.5,3);
-    } else {
-      ctx.fillStyle='rgba(238,226,255,.72)';
-      ctx.fillRect(3,17+bob,3.5,4.5);ctx.fillRect(11,17+bob,3.5,4.5);
-      ctx.fillRect(4,15+bob,2.5,3);ctx.fillRect(12,15+bob,2.5,3);
-    }
+  /* ── TAIL ─────────────────────────────────────────── */
+  // Main tail — white with purple swirl tip
+  ctx.save();
+  ctx.translate(cx - S(18) + tailSwing, cy - S(10) + bob);
+  // Outer tail puff
+  const tailG = ctx.createRadialGradient(0,0,0,0,0,S(28));
+  tailG.addColorStop(0,'rgba(242,238,255,0.95)');
+  tailG.addColorStop(0.6,'rgba(220,210,255,0.7)');
+  tailG.addColorStop(1,'rgba(130,80,200,0)');
+  ctx.fillStyle = tailG;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, S(28), S(22), Math.PI*0.15, 0, Math.PI*2);
+  ctx.fill();
+  // Purple swirl at tail tip
+  ctx.strokeStyle = 'rgba(155,92,246,0.8)';
+  ctx.lineWidth = S(1.5);
+  ctx.beginPath();
+  ctx.arc(S(8), S(-4), S(6), 0.3, Math.PI*1.8);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(S(10), S(-2), S(3), 0.3, Math.PI*1.8);
+  ctx.stroke();
+  ctx.restore();
 
-    // Basket
-    ctx.fillStyle='rgba(109,40,217,.5)';ctx.fillRect(15,11+bob,7,6);
-    ctx.strokeStyle='rgba(192,132,252,.35)';ctx.lineWidth=1;ctx.strokeRect(15,11+bob,7,6);
-    if(fox.state==='forge'){
-      const bkg=ctx.createRadialGradient(18.5,14+bob,0,18.5,14+bob,8);
-      bkg.addColorStop(0,'rgba(45,212,191,.5)');bkg.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.fillStyle=bkg;ctx.fillRect(10,8+bob,18,14);
-    }
-
-    // Carried lantern
-    if(fox.lantern){
-      const lox=21+Math.sin(tick*.06)*1.5,loy=9+bob;
-      ctx.strokeStyle='rgba(155,92,246,.4)';ctx.lineWidth=.8;
-      ctx.beginPath();ctx.moveTo(16,8+bob);ctx.lineTo(lox,loy);ctx.stroke();
-      const llg=ctx.createRadialGradient(lox,loy,0,lox,loy,9);
-      llg.addColorStop(0,'rgba(232,201,122,.58)');llg.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.fillStyle=llg;ctx.fillRect(lox-9,loy-9,18,18);
-      ctx.fillStyle='rgba(238,215,115,.88)';
-      if(ctx.roundRect){ctx.beginPath();ctx.roundRect(lox-3.5,loy-5,7,10,1.5);ctx.fill();}else ctx.fillRect(lox-3.5,loy-5,7,10);
-      ctx.fillStyle='rgba(255,252,220,.6)';ctx.fillRect(lox-2,loy-3.5,4,7);
-    }
-
-    ctx.restore();
-
-    // Ground shadow glow
-    const sgw=ctx.createRadialGradient(fox.x*W(),fox.y*H()+2,0,fox.x*W(),fox.y*H()+2,18);
-    sgw.addColorStop(0,'rgba(155,92,246,.14)');sgw.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=sgw;ctx.fillRect(fox.x*W()-18,fox.y*H()-4,36,12);
+  /* ── SPIRIT FLAMES ────────────────────────────────── */
+  // Left flame
+  drawSpritFlame(ctx, cx - S(22), cy - S(28) + bob, S(7), flamePhase);
+  // Right flame (only in forge/celebrate state — bigger)
+  if(fox.state==='forge'||fox.state==='celebrate'||fox.state==='stall'){
+    drawSpritFlame(ctx, cx + S(18), cy - S(32) + bob, S(9), flamePhase + 1.2);
   }
+
+  /* ── BODY / ROBE ──────────────────────────────────── */
+  const bx = cx, by = cy + bob;
+  // Dark robe — main body
+  ctx.fillStyle = '#1a0d30';
+  ctx.beginPath();
+  ctx.moveTo(bx - S(20), by);
+  ctx.bezierCurveTo(bx - S(24), by - S(20), bx - S(20), by - S(50), bx - S(10), by - S(60));
+  ctx.lineTo(bx + S(10), by - S(60));
+  ctx.bezierCurveTo(bx + S(20), by - S(50), bx + S(24), by - S(20), bx + S(20), by);
+  ctx.closePath();
+  ctx.fill();
+  // Robe highlight — purple inner
+  ctx.fillStyle = 'rgba(88,28,135,0.5)';
+  ctx.beginPath();
+  ctx.moveTo(bx - S(8), by);
+  ctx.bezierCurveTo(bx - S(10), by - S(20), bx - S(8), by - S(45), bx - S(2), by - S(55));
+  ctx.lineTo(bx + S(2), by - S(55));
+  ctx.bezierCurveTo(bx + S(8), by - S(45), bx + S(10), by - S(20), bx + S(8), by);
+  ctx.closePath();
+  ctx.fill();
+  // Robe star/moon pattern
+  ctx.fillStyle = 'rgba(232,201,122,0.3)';
+  ctx.font = S(8)+'px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('✦', bx, by - S(15));
+  ctx.fillText('☽', bx + S(8), by - S(30));
+
+  /* ── GOLD BRAIDED CORD ──────────────────────────────── */
+  ctx.strokeStyle = '#c9922a';
+  ctx.lineWidth = S(2.5);
+  ctx.beginPath();
+  for(let i=0;i<8;i++){
+    const px = bx - S(6) + Math.sin(i*0.7)*S(3);
+    const py = by - S(55) + i*S(6);
+    i===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+  // Gold circle medallion
+  ctx.strokeStyle = '#e8c97a';
+  ctx.lineWidth = S(2);
+  ctx.beginPath();
+  ctx.arc(bx - S(2), by - S(20), S(6), 0, Math.PI*2);
+  ctx.stroke();
+
+  /* ── CHEST FUR ────────────────────────────────────── */
+  const chestG = ctx.createRadialGradient(bx, by - S(52), 0, bx, by - S(52), S(14));
+  chestG.addColorStop(0,'rgba(252,250,255,0.95)');
+  chestG.addColorStop(0.7,'rgba(235,228,255,0.7)');
+  chestG.addColorStop(1,'rgba(200,180,255,0)');
+  ctx.fillStyle = chestG;
+  ctx.beginPath();
+  ctx.ellipse(bx, by - S(52), S(14), S(10), 0, 0, Math.PI*2);
+  ctx.fill();
+
+  /* ── HEAD ─────────────────────────────────────────── */
+  const hx = cx, hy = cy - S(62) + bob;
+  // Head base — white/cream
+  ctx.fillStyle = 'rgba(248,244,255,0.97)';
+  ctx.beginPath();
+  ctx.arc(hx, hy, S(18), 0, Math.PI*2);
+  ctx.fill();
+  // Muzzle
+  ctx.fillStyle = 'rgba(242,235,255,0.9)';
+  ctx.beginPath();
+  ctx.ellipse(hx + S(6), hy + S(6), S(10), S(7), -0.2, 0, Math.PI*2);
+  ctx.fill();
+  // Dark nose
+  ctx.fillStyle = '#2d0a4e';
+  ctx.beginPath();
+  ctx.ellipse(hx + S(10), hy + S(4), S(2.5), S(1.8), 0, 0, Math.PI*2);
+  ctx.fill();
+  // Mouth line
+  ctx.strokeStyle = '#2d0a4e';
+  ctx.lineWidth = S(0.8);
+  ctx.beginPath();
+  ctx.moveTo(hx + S(8), hy + S(6));
+  ctx.quadraticCurveTo(hx + S(11), hy + S(9), hx + S(14), hy + S(7));
+  ctx.stroke();
+
+  /* ── EARS ─────────────────────────────────────────── */
+  // Left ear
+  ctx.fillStyle = 'rgba(248,244,255,0.97)';
+  ctx.beginPath();
+  ctx.moveTo(hx - S(8), hy - S(10));
+  ctx.lineTo(hx - S(18), hy - S(34));
+  ctx.lineTo(hx - S(2), hy - S(18));
+  ctx.closePath();
+  ctx.fill();
+  // Left ear inner black
+  ctx.fillStyle = '#0d0520';
+  ctx.beginPath();
+  ctx.moveTo(hx - S(8), hy - S(12));
+  ctx.lineTo(hx - S(15), hy - S(30));
+  ctx.lineTo(hx - S(4), hy - S(18));
+  ctx.closePath();
+  ctx.fill();
+  // Right ear
+  ctx.fillStyle = 'rgba(248,244,255,0.97)';
+  ctx.beginPath();
+  ctx.moveTo(hx + S(10), hy - S(10));
+  ctx.lineTo(hx + S(20), hy - S(36));
+  ctx.lineTo(hx + S(4), hy - S(18));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#0d0520';
+  ctx.beginPath();
+  ctx.moveTo(hx + S(10), hy - S(12));
+  ctx.lineTo(hx + S(17), hy - S(32));
+  ctx.lineTo(hx + S(5), hy - S(18));
+  ctx.closePath();
+  ctx.fill();
+
+  /* ── GOLD EAR RINGS + 天狐 TAG ─────────────────── */
+  ctx.strokeStyle = '#e8c97a';
+  ctx.lineWidth = S(1.5);
+  ctx.beginPath();
+  ctx.arc(hx - S(14), hy - S(28), S(3), 0, Math.PI*2);
+  ctx.stroke();
+  // Tag
+  ctx.fillStyle = '#1a0d30';
+  ctx.fillRect(hx - S(22), hy - S(38), S(12), S(9));
+  ctx.strokeStyle = '#e8c97a';
+  ctx.lineWidth = S(0.8);
+  ctx.strokeRect(hx - S(22), hy - S(38), S(12), S(9));
+  ctx.fillStyle = 'rgba(232,201,122,0.9)';
+  ctx.font = S(5)+'px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('天狐', hx - S(16), hy - S(32));
+
+  /* ── FACIAL MARKINGS ───────────────────────────────── */
+  // Forehead sigil — circular with inner detail
+  const sigilA = 0.6 + Math.sin(tick * 0.04) * 0.2;
+  ctx.strokeStyle = `rgba(155,92,246,${sigilA})`;
+  ctx.lineWidth = S(1.4);
+  ctx.beginPath();
+  ctx.arc(hx - S(2), hy - S(8), S(6), 0, Math.PI*2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(hx - S(2), hy - S(8), S(2.5), 0, Math.PI*2);
+  ctx.stroke();
+  // Forehead sigil rays
+  for(let i=0;i<4;i++){
+    const a = (i/4)*Math.PI*2 + tick*0.01;
+    ctx.beginPath();
+    ctx.moveTo(hx - S(2) + Math.cos(a)*S(3), hy - S(8) + Math.sin(a)*S(3));
+    ctx.lineTo(hx - S(2) + Math.cos(a)*S(6.5), hy - S(8) + Math.sin(a)*S(6.5));
+    ctx.stroke();
+  }
+  // Under-eye swirl mark
+  ctx.strokeStyle = `rgba(155,92,246,${sigilA*0.8})`;
+  ctx.lineWidth = S(1.2);
+  ctx.beginPath();
+  ctx.arc(hx + S(4), hy + S(2), S(4), Math.PI*1.1, Math.PI*2.0);
+  ctx.stroke();
+
+  /* ── EYES ─────────────────────────────────────────── */
+  // Eye socket shadow
+  ctx.fillStyle = 'rgba(20,5,50,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(hx + S(4), hy - S(2), S(7), S(5), -0.15, 0, Math.PI*2);
+  ctx.fill();
+
+  if(fox.state === 'sleep'){
+    // Closed arc
+    ctx.strokeStyle = 'rgba(155,92,246,0.7)';
+    ctx.lineWidth = S(1.5);
+    ctx.beginPath();
+    ctx.arc(hx + S(4), hy - S(1), S(4), Math.PI*0.1, Math.PI*0.9);
+    ctx.stroke();
+  } else if(fox.state === 'celebrate'){
+    // Star eyes
+    ctx.fillStyle = 'rgba(232,201,122,0.95)';
+    ctx.font = S(10)+'px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('★', hx + S(4), hy + S(2));
+  } else {
+    // Purple iris — intense gaze
+    // Sclera
+    ctx.fillStyle = 'rgba(15,5,35,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(hx + S(4), hy - S(1), S(6), S(4.5), -0.1, 0, Math.PI*2);
+    ctx.fill();
+    // Iris — glowing purple
+    const irisGlow = ctx.createRadialGradient(hx + S(4), hy - S(1), 0, hx + S(4), hy - S(1), S(3.5));
+    irisGlow.addColorStop(0,'rgba(220,180,255,1)');
+    irisGlow.addColorStop(0.4,'rgba(155,92,246,0.95)');
+    irisGlow.addColorStop(1,'rgba(80,20,160,0.8)');
+    ctx.fillStyle = irisGlow;
+    ctx.beginPath();
+    ctx.ellipse(hx + S(4), hy - S(1), S(3.5), S(3.2), 0, 0, Math.PI*2);
+    ctx.fill();
+    // Pupil
+    ctx.fillStyle = '#0a0118';
+    ctx.beginPath();
+    ctx.ellipse(hx + S(4.5), hy - S(1), S(1.5), S(2.8), 0.1, 0, Math.PI*2);
+    ctx.fill();
+    // Eye shine
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath();
+    ctx.arc(hx + S(5.5), hy - S(2.5), S(1), 0, Math.PI*2);
+    ctx.fill();
+    // Eye glow aura
+    if(fox.state === 'forge'){
+      const eyeAura = ctx.createRadialGradient(hx+S(4),hy-S(1),0,hx+S(4),hy-S(1),S(9));
+      eyeAura.addColorStop(0,'rgba(155,92,246,0.3)');
+      eyeAura.addColorStop(1,'rgba(155,92,246,0)');
+      ctx.fillStyle = eyeAura;
+      ctx.beginPath();
+      ctx.arc(hx+S(4), hy-S(1), S(9), 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  /* ── MOON CHARM (right side) ───────────────────────── */
+  const charmSwing = Math.sin(tick*0.03) * S(2);
+  ctx.strokeStyle = '#c9922a';
+  ctx.lineWidth = S(1);
+  ctx.beginPath();
+  ctx.moveTo(cx + S(16), cy - S(55) + bob);
+  ctx.lineTo(cx + S(16) + charmSwing, cy - S(35) + bob);
+  ctx.stroke();
+  ctx.fillStyle = '#1a0d30';
+  ctx.fillRect(cx + S(10) + charmSwing, cy - S(35) + bob, S(12), S(10));
+  ctx.strokeStyle = '#e8c97a';
+  ctx.lineWidth = S(0.8);
+  ctx.strokeRect(cx + S(10) + charmSwing, cy - S(35) + bob, S(12), S(10));
+  ctx.fillStyle = 'rgba(232,201,122,0.8)';
+  ctx.font = S(6)+'px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('☽', cx + S(16) + charmSwing, cy - S(28) + bob);
+
+  /* ── PAWS / LEGS ───────────────────────────────────── */
+  if(fox.state === 'walk'){
+    const lswing = Math.sin(fox.frame*0.62) * S(5);
+    ctx.fillStyle = 'rgba(242,238,255,0.9)';
+    ctx.beginPath();ctx.ellipse(cx - S(10)+lswing, cy-S(2)+bob, S(5), S(3.5), 0.2, 0, Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(cx + S(6)-lswing, cy-S(2)+bob, S(5), S(3.5), -0.2, 0, Math.PI*2);ctx.fill();
+  } else if(fox.state==='forge'||fox.state==='celebrate'){
+    // Arms raised
+    const raiseA = fox.state==='celebrate'
+      ? Math.sin(tick*0.08)*0.3
+      : 0;
+    ctx.fillStyle = 'rgba(242,238,255,0.9)';
+    // Left paw raised up
+    ctx.beginPath();
+    ctx.ellipse(cx - S(16), cy - S(45)+bob + Math.sin(tick*0.05)*S(3), S(6), S(4), -0.5+raiseA, 0, Math.PI*2);
+    ctx.fill();
+    // Right paw raised, holding object
+    ctx.beginPath();
+    ctx.ellipse(cx + S(16), cy - S(48)+bob + Math.sin(tick*0.05+1)*S(3), S(6), S(4), 0.5-raiseA, 0, Math.PI*2);
+    ctx.fill();
+    // Stage-specific held items
+    if(fox.state==='forge'){
+      // Glowing sigil orb in right paw
+      const orbG = ctx.createRadialGradient(cx+S(18),cy-S(55)+bob,0,cx+S(18),cy-S(55)+bob,S(8));
+      orbG.addColorStop(0,'rgba(220,180,255,0.9)');
+      orbG.addColorStop(0.5,'rgba(155,92,246,0.6)');
+      orbG.addColorStop(1,'rgba(155,92,246,0)');
+      ctx.fillStyle=orbG;
+      ctx.beginPath();ctx.arc(cx+S(18),cy-S(55)+bob,S(8),0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(232,201,122,0.8)';
+      ctx.font=S(7)+'px serif';ctx.textAlign='center';
+      ctx.fillText('⊕',cx+S(18),cy-S(52)+bob);
+    }
+    if(fox.state==='celebrate'){
+      // Lantern raised high
+      const lg=ctx.createRadialGradient(cx+S(20),cy-S(65)+bob,0,cx+S(20),cy-S(65)+bob,S(12));
+      lg.addColorStop(0,'rgba(255,220,100,0.9)');
+      lg.addColorStop(1,'rgba(255,140,0,0)');
+      ctx.fillStyle=lg;ctx.fillRect(cx+S(8),cy-S(77)+bob,S(24),S(24));
+      ctx.fillStyle='rgba(238,180,60,0.9)';
+      if(ctx.roundRect){ctx.beginPath();ctx.roundRect(cx+S(14),cy-S(74)+bob,S(12),S(16),3);ctx.fill();}
+      else ctx.fillRect(cx+S(14),cy-S(74)+bob,S(12),S(16));
+      ctx.fillStyle='rgba(255,230,150,0.7)';ctx.fillRect(cx+S(16),cy-S(71)+bob,S(8),S(10));
+    }
+  } else {
+    // Idle paws at sides
+    ctx.fillStyle = 'rgba(242,238,255,0.85)';
+    ctx.beginPath();ctx.ellipse(cx-S(14),cy-S(8)+bob,S(5),S(3.5),-0.1,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(cx+S(14),cy-S(8)+bob,S(5),S(3.5),0.1,0,Math.PI*2);ctx.fill();
+  }
+
+  /* ── STAGE STATUS TEXT ─────────────────────────────── */
+  // Small floating label above Kitsari showing current state
+  let stateLabel = '';
+  if(fox.state==='forge')   stateLabel='⚙ Forging...';
+  if(fox.state==='celebrate')stateLabel='✦ Done!';
+  if(fox.state==='stall')   stateLabel='👁 Inspecting';
+  if(stateLabel){
+    ctx.fillStyle='rgba(232,201,122,0.75)';
+    ctx.font=`${S(7)}px 'Share Tech Mono',monospace`;
+    ctx.textAlign='center';
+    ctx.fillText(stateLabel, cx, cy - S(88) + bob);
+  }
+
+  /* ── GROUND SHADOW ─────────────────────────────────── */
+  const shadowG = ctx.createRadialGradient(cx,cy+S(2),0,cx,cy+S(2),S(22));
+  shadowG.addColorStop(0,'rgba(88,28,135,0.22)');
+  shadowG.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=shadowG;
+  ctx.beginPath();ctx.ellipse(cx,cy+S(2),S(22),S(6),0,0,Math.PI*2);ctx.fill();
+
+  ctx.restore();
+}
+
+function drawSpritFlame(ctx, x, y, size, phase){
+  // Animated spirit flame — purple/lavender wisps
+  ctx.save();
+  const a1 = 0.5 + Math.sin(phase)*0.3;
+  const a2 = 0.35 + Math.sin(phase+1)*0.2;
+  const flameH = size * (1.2 + Math.sin(phase*1.3)*0.4);
+  // Outer flame
+  const fg = ctx.createRadialGradient(x,y,0,x,y-flameH,size*1.8);
+  fg.addColorStop(0,'rgba(192,132,252,'+a1+')');
+  fg.addColorStop(0.5,'rgba(155,92,246,'+a2+')');
+  fg.addColorStop(1,'rgba(88,28,135,0)');
+  ctx.fillStyle=fg;
+  ctx.beginPath();
+  ctx.moveTo(x,y);
+  ctx.bezierCurveTo(
+    x+size*(0.8+Math.sin(phase)*0.3), y-flameH*0.4,
+    x+size*(0.5+Math.sin(phase+1)*0.2), y-flameH,
+    x, y-flameH*1.2
+  );
+  ctx.bezierCurveTo(
+    x-size*(0.5+Math.sin(phase+2)*0.2), y-flameH,
+    x-size*(0.8+Math.sin(phase+0.5)*0.3), y-flameH*0.4,
+    x, y
+  );
+  ctx.fill();
+  // Inner bright core
+  ctx.fillStyle='rgba(220,190,255,'+(a1*0.6)+')';
+  ctx.beginPath();
+  ctx.arc(x, y-flameH*0.3, size*0.4, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
 
   /* ── Fox state machine ───────────────────────────────────────────────── */
   function updateFox(){
@@ -2070,15 +2371,77 @@ function initHabitat(){
     if(busyness>.5&&tick%48===0)spawnForge();
   }
 
-  /* ── Event hookup ────────────────────────────────────────────────────── */
-  const s1btn=document.getElementById('stage1-btn');
-  if(s1btn){
-    s1btn.addEventListener('click',()=>{
-      fox.targetStall=Math.floor(Math.random()*STALLS.length);
-      fox.goalMode='forge';
-      setTimeout(()=>{scrollOpen=true;},2600);
+// STAGE ANIMATION HOOKUPS — replace the existing event hookup section in initHabitat
+
+  /* ── Stage-specific Kitsari animations ──────────────────────────────────── */
+  // Called from the wizard stage functions via window._stageAnim(n)
+  window._stageAnim = (stage) => {
+    switch(stage){
+      case 1: // Concept — Kitsari walks to center, sits, scroll opens
+        fox.dir = fox.x > 0.5 ? -1 : 1;
+        fox.targetStall = 1; // PRINTS stall center
+        fox.goalMode = 'forge';
+        fox.state = 'walk';
+        setTimeout(()=>{ scrollOpen=true; }, 2800);
+        break;
+      case 2: // Catalog — walks left, inspects SCROLLS stall
+        fox.targetStall = 0;
+        fox.goalMode = 'forge';
+        fox.state = 'walk';
+        break;
+      case 3: // Artwork — walks to forge position, raises paws, sigil spawns
+        fox.targetStall = 1;
+        fox.goalMode = 'forge';
+        fox.state = 'walk';
+        setTimeout(()=>{ spawnForge(); spawnSigil(); }, 1500);
+        setTimeout(()=>{ spawnForge(); }, 2200);
+        break;
+      case 4: // Create — walks to CHARMS stall, forge animation
+        fox.targetStall = 2;
+        fox.goalMode = 'forge';
+        fox.state = 'walk';
+        setTimeout(()=>{ spawnForge(); districtBrightness = Math.min(2, districtBrightness+0.3); }, 1800);
+        break;
+      case 5: // Sync — celebrate, lantern raise, district brightens
+        fox.state = 'celebrate';
+        fox.timer = 0;
+        fox.targetStall = -1;
+        fox.goalMode = null;
+        districtBrightness = Math.min(2, districtBrightness+0.5);
+        busyness = 0.8;
+        spawnSigil();
+        setTimeout(()=>{ spawnSigil(); }, 400);
+        setTimeout(()=>{ spawnSigil(); }, 800);
+        STALLS.forEach((_,i)=>{ stallActivityMap[i]=1.0; });
+        break;
+    }
+    // Always pulse lanterns and stalls on any stage advance
+    habFlashDOM(stage >= 5 ? 'etsy' : stage >= 3 ? 'teal' : 'draft');
+  };
+
+  /* ── Event hookup — attach to all wizard stage buttons ─────────────────── */
+  const stageButtons = [
+    {id:'stage1-btn', stage:1},
+    {id:'stage2-btn', stage:2},
+    {id:'stage3-btn', stage:3},  // upload
+    {id:'stage4-btn', stage:4},  // create
+    {id:'stage4-btn', stage:4},  // (create = stage 4 in 5-stage wizard)
+  ];
+  stageButtons.forEach(({id, stage})=>{
+    const btn = document.getElementById(id);
+    if(btn) btn.addEventListener('click', ()=> window._stageAnim(stage));
+  });
+
+  // Stage 5 (sync success) — trigger from the sync button
+  const s4btn = document.getElementById('stage4-btn');
+  if(s4btn){
+    s4btn.addEventListener('click',()=>{
+      // Stage 5 celebrate fires when sync completes — hook into the success path
+      const orig = window.runStage4;
+      // The celebrate fires via _habSignal('etsy') which is already in the sync route
     });
   }
+
 
   /* ── Main render loop ────────────────────────────────────────────────── */
   (function loop(){
