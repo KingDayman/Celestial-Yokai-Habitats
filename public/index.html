@@ -964,7 +964,7 @@ let wizardState={
   aiDraft:'',productType:'',
   blueprintId:null,blueprintTitle:'',
   providerId:null,providerName:'',providerLocation:'',providerScore:0,
-  variantId:null,variantTitle:'',
+  variantId:null,variantTitle:'',allVariantIds:[],
   printifyProductId:null,
   etsyListingId:null,etsyUrl:null,
 };
@@ -1000,7 +1000,7 @@ function setSyncStep(id,state,label){
   el.innerHTML='<span class="sdot"></span>'+label;
 }
 function resetWizard(){
-  wizardState={aiDraft:'',productType:'',blueprintId:null,blueprintTitle:'',providerId:null,providerName:'',providerLocation:'',providerScore:0,variantId:null,variantTitle:'',printifyImageId:null,printifyProductId:null,etsyListingId:null,etsyUrl:null};
+  wizardState={aiDraft:'',productType:'',blueprintId:null,blueprintTitle:'',providerId:null,providerName:'',providerLocation:'',providerScore:0,variantId:null,variantTitle:'',allVariantIds:[],printifyImageId:null,printifyProductId:null,etsyListingId:null,etsyUrl:null};
   goStage(1);
   document.getElementById('gp-concept').value='';
   document.getElementById('gp-buyer').value='';
@@ -1132,6 +1132,8 @@ async function fetchProviderAndAdvance(){
     wizardState.providerScore=info.provider.score||0;
     wizardState.variantId=info.variant.id;
     wizardState.variantTitle=info.variant.title;
+    wizardState.allVariantIds=info.allVariantIds||[info.variant.id];
+    console.log('[Catalog] allVariantIds count='+wizardState.allVariantIds.length);
 
     console.log('[Stage2] Provider resolved: id='+info.provider.id+' "'+info.provider.title+'" loc='+info.provider.location+' score='+info.provider.score+' variant='+info.variant.id+' "'+info.variant.title+'"');
 
@@ -1232,6 +1234,7 @@ async function runStage3(){
         blueprintId:wizardState.blueprintId,
         printProviderId:wizardState.providerId,
         variantId:wizardState.variantId,
+        allVariantIds:wizardState.allVariantIds,
         printifyImageId:wizardState.printifyImageId,
       }),
     });
@@ -1308,14 +1311,30 @@ async function runStage4(){
 
     if(!r.ok)throw new Error(d.error||'Etsy sync failed');
 
-    wizardState.etsyListingId=d.listingId;
-    wizardState.etsyUrl=d.etsyUrl;
-    setSyncStep('ss-etsy','done','Etsy Draft ✓ id='+d.listingId+' tags='+d.tagCount);
+    // Handle both Printify-native publish response and direct Etsy response
+    wizardState.etsyListingId=d.listingId||d.printifyProductId||'—';
+    wizardState.etsyUrl=d.etsyUrl||null;
+    const syncLabel=d.listingId
+      ? 'Etsy Draft ✓ id='+d.listingId
+      : 'Printify Product published ✓ id='+d.printifyProductId;
+    setSyncStep('ss-etsy','done',syncLabel);
 
     const banner=document.getElementById('success-banner');
     banner.style.display='block';
+
+    // Update banner text to reflect Printify publish flow
+    const bannerTxt=document.querySelector('#success-banner .sb-txt');
+    if(bannerTxt&&d.message){bannerTxt.textContent=d.message;}
+
     const link=document.getElementById('etsy-draft-link');
-    if(d.etsyUrl){link.href=d.etsyUrl;link.style.display='inline-block';}
+    if(d.etsyUrl){
+      link.href=d.etsyUrl;link.style.display='inline-block';
+    } else {
+      // Show Printify dashboard link instead
+      link.href='https://printify.com/app/products';
+      link.textContent='⟩ VIEW IN PRINTIFY DASHBOARD';
+      link.style.display='inline-block';
+    }
 
     habFlash('gold');
     setTimeout(brightLanterns,200);
