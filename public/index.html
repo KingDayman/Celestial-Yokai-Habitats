@@ -306,154 +306,226 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
 .ft-r{font-size:.7rem;letter-spacing:.28em;opacity:.15;margin-top:.3rem}
 
 /* ═══ HABITAT CSS SCENE ═══════════════════════════════════════════════ */
-.hab-sky{position:absolute;inset:0;background:linear-gradient(180deg,#060118 0%,#110830 55%,#180d3a 100%)}
-.hab-moon{position:absolute;top:10%;right:15%;width:36px;height:36px;border-radius:50%;
-  background:radial-gradient(circle at 38% 38%,rgba(248,230,170,0.9),rgba(200,180,120,0.6));
-  box-shadow:0 0 18px rgba(248,224,150,0.5),0 0 40px rgba(248,224,150,0.2);animation:moon-pulse 4s ease-in-out infinite}
-@keyframes moon-pulse{0%,100%{box-shadow:0 0 18px rgba(248,224,150,0.5),0 0 40px rgba(248,224,150,0.2)}50%{box-shadow:0 0 28px rgba(248,224,150,0.8),0 0 60px rgba(248,224,150,0.3)}}
+.hab-sky{position:absolute;inset:0;background:linear-gradient(180deg,#04010f 0%,#0e0625 45%,#1a0a3a 100%)}
+.hab-moon{position:absolute;top:8%;right:12%;width:24px;height:24px;border-radius:50%;
+  background:radial-gradient(circle at 38% 35%,rgba(255,248,200,0.95),rgba(220,190,110,0.7));
+  box-shadow:0 0 12px rgba(255,235,150,0.5),0 0 30px rgba(255,235,150,0.2);
+  animation:moon-pulse 4s ease-in-out infinite}
+@keyframes moon-pulse{0%,100%{box-shadow:0 0 12px rgba(255,235,150,0.5),0 0 30px rgba(255,235,150,0.2)}
+  50%{box-shadow:0 0 20px rgba(255,235,150,0.8),0 0 50px rgba(255,235,150,0.3)}}
 .hab-stars{position:absolute;inset:0;background-image:
-  radial-gradient(1px 1px at 10% 15%,rgba(255,255,255,0.7),transparent),
-  radial-gradient(1px 1px at 25% 8%,rgba(255,255,255,0.5),transparent),
-  radial-gradient(1px 1px at 40% 20%,rgba(255,255,255,0.6),transparent),
-  radial-gradient(1px 1px at 55% 5%,rgba(255,255,255,0.8),transparent),
-  radial-gradient(1px 1px at 70% 12%,rgba(255,255,255,0.4),transparent),
-  radial-gradient(1px 1px at 82% 18%,rgba(255,255,255,0.7),transparent),
-  radial-gradient(1px 1px at 90% 7%,rgba(255,255,255,0.5),transparent),
-  radial-gradient(1px 1px at 15% 30%,rgba(255,255,255,0.3),transparent),
-  radial-gradient(1px 1px at 35% 28%,rgba(255,255,255,0.6),transparent),
-  radial-gradient(1px 1px at 60% 25%,rgba(255,255,255,0.4),transparent);
-  animation:star-twinkle 6s ease-in-out infinite alternate}
-@keyframes star-twinkle{0%{opacity:0.7}100%{opacity:1}}
-.hab-city{position:absolute;bottom:30%;left:0;right:0;height:35%;
-  background:linear-gradient(180deg,transparent 0%,
-    rgba(15,8,40,0.5) 40%,rgba(20,10,45,0.8) 60%,rgba(20,10,45,0.95) 100%);
-  clip-path:polygon(0% 100%,0% 55%,3% 55%,3% 30%,6% 30%,6% 45%,9% 45%,9% 20%,12% 20%,12% 45%,
-    15% 45%,15% 35%,18% 35%,18% 50%,21% 50%,21% 25%,24% 25%,24% 50%,27% 50%,
-    30% 50%,30% 38%,33% 38%,33% 55%,36% 55%,36% 28%,39% 28%,39% 55%,
-    42% 55%,42% 40%,45% 40%,45% 20%,48% 20%,48% 40%,51% 40%,
-    54% 40%,54% 32%,57% 32%,57% 48%,60% 48%,60% 25%,63% 25%,63% 48%,
-    66% 48%,66% 38%,69% 38%,69% 55%,72% 55%,72% 30%,75% 30%,75% 55%,
-    78% 55%,78% 42%,81% 42%,81% 22%,84% 22%,84% 42%,87% 42%,
-    90% 42%,90% 35%,93% 35%,93% 50%,96% 50%,96% 45%,100% 45%,100% 100%)}
+  radial-gradient(1px 1px at 8% 12%,rgba(255,255,255,0.8),transparent),
+  radial-gradient(1px 1px at 20% 6%,rgba(255,255,255,0.5),transparent),
+  radial-gradient(1.5px 1.5px at 33% 18%,rgba(255,255,255,0.7),transparent),
+  radial-gradient(1px 1px at 47% 8%,rgba(255,255,255,0.9),transparent),
+  radial-gradient(1px 1px at 58% 14%,rgba(255,255,255,0.4),transparent),
+  radial-gradient(1.5px 1.5px at 68% 5%,rgba(255,255,255,0.8),transparent),
+  radial-gradient(1px 1px at 78% 20%,rgba(255,255,255,0.6),transparent),
+  radial-gradient(1px 1px at 88% 10%,rgba(255,255,255,0.5),transparent),
+  radial-gradient(1px 1px at 14% 28%,rgba(255,255,255,0.3),transparent),
+  radial-gradient(1px 1px at 44% 22%,rgba(192,132,252,0.6),transparent),
+  radial-gradient(1px 1px at 72% 16%,rgba(192,132,252,0.4),transparent),
+  radial-gradient(1px 1px at 92% 24%,rgba(255,255,255,0.6),transparent);
+  animation:star-twinkle 5s ease-in-out infinite alternate}
+@keyframes star-twinkle{0%{opacity:0.65}100%{opacity:1}}
+.hab-city{position:absolute;bottom:28%;left:0;right:0;height:40%;
+  background:linear-gradient(180deg,transparent 0%,rgba(18,8,42,0.6) 50%,rgba(22,10,46,0.95) 100%);
+  clip-path:polygon(0% 100%,0% 52%,2% 52%,2% 28%,5% 28%,5% 42%,8% 42%,8% 18%,11% 18%,11% 42%,
+    14% 42%,14% 32%,17% 32%,17% 48%,20% 48%,20% 22%,23% 22%,23% 48%,
+    26% 48%,26% 36%,29% 36%,29% 52%,32% 52%,32% 24%,35% 24%,35% 52%,
+    38% 52%,38% 38%,41% 38%,41% 18%,44% 18%,44% 38%,47% 38%,
+    50% 38%,50% 29%,53% 29%,53% 46%,56% 46%,56% 22%,59% 22%,59% 46%,
+    62% 46%,62% 35%,65% 35%,65% 52%,68% 52%,68% 28%,71% 28%,71% 52%,
+    74% 52%,74% 40%,77% 40%,77% 20%,80% 20%,80% 40%,83% 40%,
+    86% 40%,86% 32%,89% 32%,89% 48%,92% 48%,92% 42%,95% 42%,95% 30%,97% 30%,97% 48%,100% 48%,100% 100%)}
+/* Window lights on buildings */
+.hab-city::before{content:'';position:absolute;inset:0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 10% 60%,rgba(255,220,100,0.4),transparent),
+    radial-gradient(1.5px 1.5px at 24% 70%,rgba(255,220,100,0.3),transparent),
+    radial-gradient(1.5px 1.5px at 36% 55%,rgba(192,132,252,0.3),transparent),
+    radial-gradient(1.5px 1.5px at 52% 65%,rgba(255,220,100,0.4),transparent),
+    radial-gradient(1.5px 1.5px at 67% 58%,rgba(255,220,100,0.3),transparent),
+    radial-gradient(1.5px 1.5px at 80% 70%,rgba(192,132,252,0.3),transparent),
+    radial-gradient(1.5px 1.5px at 91% 60%,rgba(255,220,100,0.4),transparent)}
 .hab-ground{position:absolute;bottom:0;left:0;right:0;height:30%;
-  background:linear-gradient(180deg,#221248 0%,#110828 100%);
-  clip-path:polygon(8% 0%,92% 0%,100% 100%,0% 100%)}
+  background:linear-gradient(180deg,#251450 0%,#120a28 100%);
+  clip-path:polygon(5% 0%,95% 0%,100% 100%,0% 100%)}
+/* Ground glow */
+.hab-ground::before{content:'';position:absolute;bottom:80%;left:10%;right:10%;height:20px;
+  background:linear-gradient(90deg,transparent,rgba(155,92,246,0.08),rgba(232,201,122,0.05),rgba(155,92,246,0.08),transparent);
+  filter:blur(4px)}
 
-/* Lanterns */
-.hab-lantern-row{position:absolute;top:0;left:0;right:0;height:22%;}
-.hab-lan{position:absolute;top:5%;width:10px;text-align:center;display:flex;flex-direction:column;align-items:center;
+/* ── Lanterns ── */
+.hab-lantern-row{position:absolute;top:0;left:0;right:0;height:26%}
+.hab-lan{position:absolute;top:6%;width:12px;text-align:center;display:flex;flex-direction:column;align-items:center;
   animation:lan-sway 3s ease-in-out infinite}
-.hab-lan::before{content:'';display:block;width:1px;height:16px;background:rgba(155,92,246,0.4)}
-.hab-lan::after{content:'';display:block;width:9px;height:12px;border-radius:2px;
-  background:linear-gradient(180deg,rgba(238,215,115,0.9),rgba(255,200,60,0.7));
-  box-shadow:0 0 8px rgba(232,201,122,0.6),0 0 20px rgba(232,201,122,0.3)}
-.hab-lan span{font-size:5px;color:rgba(232,201,122,0.6);margin-top:1px}
-@keyframes lan-sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+.hab-lan::before{content:'';display:block;width:1px;height:18px;background:rgba(155,92,246,0.35)}
+.hab-lan::after{content:'';display:block;width:10px;height:14px;border-radius:3px 3px 6px 6px;
+  background:linear-gradient(180deg,rgba(245,200,80,0.95),rgba(255,155,30,0.8));
+  box-shadow:0 0 8px rgba(232,180,60,0.7),0 0 22px rgba(232,180,60,0.25),0 0 40px rgba(232,180,60,0.1)}
+.hab-lan span{font-size:5.5px;color:rgba(232,201,122,0.65);margin-top:2px;font-family:serif}
+@keyframes lan-sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
 
-/* Stalls */
-.hab-stalls{position:absolute;bottom:28%;left:0;right:0;height:30%}
-.hab-stall{position:absolute;bottom:0;width:18%;display:flex;flex-direction:column;align-items:center}
-.hab-stall::before{content:'';position:absolute;bottom:0;left:0;right:0;height:90%;
-  background:rgba(38,12,82,0.85);border-top:2px solid rgba(232,201,122,0.3);
-  clip-path:polygon(10% 100%,90% 100%,100% 0%,0% 0%)}
-.hab-stall-orb{width:10px;height:10px;border-radius:50%;background:var(--c);
-  box-shadow:0 0 8px var(--c),0 0 16px var(--c);
-  position:relative;z-index:2;margin-bottom:4px;
+/* ── Stalls ── */
+.hab-stalls{position:absolute;bottom:28%;left:0;right:0;height:32%}
+.hab-stall{position:absolute;bottom:0;width:20%;display:flex;flex-direction:column;align-items:center;gap:3px}
+.hab-stall::before{content:'';position:absolute;bottom:0;left:0;right:0;height:88%;
+  background:linear-gradient(160deg,rgba(45,15,90,0.9),rgba(28,10,60,0.95));
+  border-top:2px solid rgba(232,201,122,0.4);
+  clip-path:polygon(8% 100%,92% 100%,100% 0%,0% 0%);
+  box-shadow:inset 0 0 12px rgba(155,92,246,0.1)}
+.hab-stall::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,transparent,rgba(232,201,122,0.6),transparent)}
+.hab-stall-orb{width:12px;height:12px;border-radius:50%;background:var(--c);
+  box-shadow:0 0 10px var(--c),0 0 20px var(--c),0 0 40px color-mix(in srgb,var(--c) 30%,transparent);
+  position:relative;z-index:2;
   animation:orb-float 2.5s ease-in-out infinite}
-@keyframes orb-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-.hab-stall span{font-family:'Share Tech Mono',monospace;font-size:5px;color:rgba(232,201,122,0.6);
-  position:relative;z-index:2;letter-spacing:0.08em}
+@keyframes orb-float{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-6px) scale(1.1)}}
+.hab-stall span{font-family:'Share Tech Mono',monospace;font-size:5px;color:rgba(232,201,122,0.65);
+  position:relative;z-index:2;letter-spacing:0.1em}
 
-/* ── KITSARI CHARACTER ─────────────────────────────────────────── */
-.hab-kitsari{position:absolute;bottom:28%;left:30%;width:56px;height:90px;
-  animation:kits-walk 8s linear infinite}
+/* ═══ KITSARI CHARACTER ═══════════════════════════════════════════════ */
+.hab-kitsari{position:absolute;bottom:28%;width:46px;height:78px;
+  animation:kits-walk 12s linear infinite;transform-origin:bottom center;
+  filter:drop-shadow(0 4px 8px rgba(88,28,135,0.5))}
 @keyframes kits-walk{
-  0%{left:5%;transform:scaleX(1)}
-  12%{left:5%}
-  38%{left:40%;transform:scaleX(1)}
-  40%{left:42%;transform:scaleX(-1)}
-  65%{left:70%;transform:scaleX(-1)}
-  67%{left:72%;transform:scaleX(1)}
-  90%{left:5%;transform:scaleX(1)}
-  100%{left:5%;transform:scaleX(1)}
+  0%   {left:5%; transform:scaleX(1)}
+  6%   {left:5%; transform:scaleX(1)}
+  36%  {left:40%;transform:scaleX(1)}
+  39%  {left:43%;transform:scaleX(-1)}
+  69%  {left:74%;transform:scaleX(-1)}
+  72%  {left:71%;transform:scaleX(1)}
+  94%  {left:5%; transform:scaleX(1)}
+  100% {left:5%; transform:scaleX(1)}
 }
-.hab-kitsari.forging{animation:none;left:40%}
-.hab-kitsari.celebrating{animation:kits-celebrate 0.5s ease-in-out infinite alternate}
-@keyframes kits-celebrate{0%{transform:translateY(0) scaleX(1)}100%{transform:translateY(-8px) scaleX(1)}}
+.hab-kitsari.forging{animation:kits-forge 1.2s ease-in-out infinite alternate;position:absolute;left:38%}
+.hab-kitsari.celebrating{animation:kits-cel 0.4s ease-in-out infinite alternate;position:absolute;left:48%}
+@keyframes kits-forge{0%{transform:translateY(0) scaleX(1)}100%{transform:translateY(-7px) scaleX(1)}}
+@keyframes kits-cel{0%{transform:translateY(0) rotate(-4deg) scaleX(1)}100%{transform:translateY(-12px) rotate(4deg) scaleX(1)}}
 
 .kits-body{position:relative;width:100%;height:100%}
 
-/* Spirit flames */
-.kits-spirit-l,.kits-spirit-r{position:absolute;width:10px;height:20px;border-radius:50% 50% 30% 30%;
-  background:linear-gradient(180deg,rgba(192,132,252,0.9),rgba(155,92,246,0.4),transparent);
-  filter:blur(2px);animation:flame-flicker 0.8s ease-in-out infinite alternate}
-.kits-spirit-l{left:2px;top:15px;animation-delay:0s}
-.kits-spirit-r{right:4px;top:10px;width:8px;height:16px;animation-delay:0.3s}
-@keyframes flame-flicker{0%{transform:scaleX(1) scaleY(1);opacity:0.7}100%{transform:scaleX(0.7) scaleY(1.2);opacity:1}}
-
 /* Tail */
-.kits-tail{position:absolute;left:-14px;top:30px;width:28px;height:22px;border-radius:50%;
-  background:radial-gradient(ellipse,rgba(252,248,255,0.95),rgba(210,190,255,0.6),transparent);
-  animation:tail-sway 2s ease-in-out infinite}
-@keyframes tail-sway{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
+.kits-tail{position:absolute;left:-20px;top:24px;width:34px;height:28px;
+  background:radial-gradient(ellipse 75% 70% at 55% 50%,rgba(255,253,255,0.97) 0%,rgba(225,215,255,0.85) 45%,rgba(155,92,246,0.12) 100%);
+  border-radius:55% 45% 42% 58%;border:1px solid rgba(200,180,255,0.35);
+  animation:tail-sway 2.4s ease-in-out infinite}
+.kits-tail::after{content:'';position:absolute;right:4px;bottom:5px;width:9px;height:9px;
+  border:1.5px solid rgba(155,92,246,0.85);border-radius:50%;
+  border-left-color:transparent;border-bottom-color:transparent;
+  box-shadow:0 0 4px rgba(155,92,246,0.4)}
+@keyframes tail-sway{0%,100%{transform:rotate(-13deg) translateY(0)}50%{transform:rotate(13deg) translateY(-3px)}}
+
+/* Spirit flames */
+.kits-spirit-l,.kits-spirit-r{position:absolute;width:8px;border-radius:50% 50% 30% 30%;
+  background:linear-gradient(180deg,rgba(210,155,255,0.95) 0%,rgba(155,92,246,0.55) 55%,transparent 100%);
+  filter:blur(1.5px);animation:flame-flicker 0.75s ease-in-out infinite alternate}
+.kits-spirit-l{left:1px;top:8px;height:20px;animation-delay:0s}
+.kits-spirit-r{right:4px;top:5px;height:16px;width:6px;animation-delay:0.28s}
+@keyframes flame-flicker{0%{transform:scaleX(1) scaleY(1);opacity:0.75}100%{transform:scaleX(0.7) scaleY(1.35);opacity:1}}
 
 /* Robe */
-.kits-robe{position:absolute;bottom:8px;left:8px;width:38px;height:48px;
-  background:linear-gradient(180deg,#1a0d30 0%,#160b28 100%);
-  clip-path:polygon(20% 0%,80% 0%,100% 100%,0% 100%);
-  border-top:1px solid rgba(155,92,246,0.3)}
-.kits-cord{position:absolute;left:50%;top:8px;width:2px;height:28px;
-  background:repeating-linear-gradient(180deg,#c9922a 0px,#e8c97a 3px,#c9922a 6px);
-  transform:translateX(-50%)}
-.kits-chest-fur{position:absolute;top:-4px;left:50%;transform:translateX(-50%);
-  width:18px;height:12px;border-radius:50%;
-  background:radial-gradient(ellipse,rgba(255,252,255,0.95),rgba(230,220,255,0.5),transparent)}
+.kits-robe{position:absolute;bottom:0;left:4px;width:38px;height:48px;
+  background:linear-gradient(155deg,#1e0e38 0%,#120828 60%,#1c0d32 100%);
+  clip-path:polygon(24% 0%,76% 0%,100% 100%,0% 100%);
+  border-top:1.5px solid rgba(155,92,246,0.45)}
+.kits-robe::before{content:'✦';position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  font-size:6px;color:rgba(232,201,122,0.4)}
+.kits-robe::after{content:'✦';position:absolute;top:20px;right:6px;font-size:4px;color:rgba(232,201,122,0.2)}
+.kits-cord{position:absolute;left:50%;top:0;width:2.5px;height:28px;transform:translateX(-50%);
+  background:repeating-linear-gradient(180deg,#b87820 0px,#f0c850 3px,#b87820 6px);border-radius:1px}
+.kits-cord::after{content:'';position:absolute;top:16px;left:50%;transform:translateX(-50%);
+  width:7px;height:7px;border-radius:50%;border:1.5px solid #e8c97a;
+  box-shadow:0 0 5px rgba(232,201,122,0.6)}
+.kits-chest-fur{position:absolute;top:-5px;left:50%;transform:translateX(-50%);
+  width:20px;height:13px;border-radius:50%;
+  background:radial-gradient(ellipse,rgba(255,254,255,0.98) 0%,rgba(238,228,255,0.75) 55%,transparent 100%)}
 
 /* Head */
-.kits-head{position:absolute;top:0;left:50%;transform:translateX(-50%);width:40px;height:44px}
-.kits-ear{position:absolute;width:0;height:0;top:2px}
-.kits-ear-l{left:2px;border-left:7px solid transparent;border-right:5px solid transparent;border-bottom:22px solid rgba(252,248,255,0.97)}
-.kits-ear-r{right:2px;border-left:5px solid transparent;border-right:7px solid transparent;border-bottom:24px solid rgba(252,248,255,0.97)}
-.kits-ear-inner{position:absolute;top:4px;left:50%;transform:translateX(-50%);
-  width:0;height:0;border-left:3px solid transparent;border-right:3px solid transparent;border-bottom:14px solid #0d0418}
-.kits-earring{position:absolute;bottom:-2px;left:-6px;width:6px;height:6px;border-radius:50%;
-  border:1.5px solid #e8c97a}
-.kits-face{position:absolute;top:8px;left:3px;right:3px;bottom:0;
-  background:rgba(252,248,255,0.97);border-radius:45% 45% 50% 50%}
+.kits-head{position:absolute;top:0;left:50%;transform:translateX(-50%);width:38px;height:42px}
+
+/* Ears */
+.kits-ear-l{position:absolute;top:0;left:2px;width:0;height:0;
+  border-left:5px solid transparent;border-right:8px solid transparent;border-bottom:24px solid rgba(252,248,255,0.97)}
+.kits-ear-l::after{content:'';position:absolute;top:4px;left:-3px;width:0;height:0;
+  border-left:2.5px solid transparent;border-right:4px solid transparent;border-bottom:15px solid #0c0418}
+.kits-ear-r{position:absolute;top:-1px;right:1px;width:0;height:0;
+  border-left:8px solid transparent;border-right:5px solid transparent;border-bottom:26px solid rgba(252,248,255,0.97)}
+.kits-ear-r::after{content:'';position:absolute;top:4px;left:-5px;width:0;height:0;
+  border-left:4px solid transparent;border-right:2.5px solid transparent;border-bottom:16px solid #0c0418}
+/* 天狐 tag */
+.kits-earring{position:absolute;top:20px;left:-1px;display:flex;flex-direction:column;align-items:center;gap:1px}
+.kits-earring::before{content:'';width:6px;height:6px;border-radius:50%;
+  border:1.5px solid #e8c97a;display:block;box-shadow:0 0 3px rgba(232,201,122,0.5)}
+.kits-earring::after{content:'天狐';font-size:3.5px;color:rgba(232,201,122,0.9);font-family:serif;
+  background:#12072a;border:0.8px solid rgba(155,92,246,0.5);padding:1px 1.5px;border-radius:1px;
+  display:block;text-align:center;line-height:1.4}
+
+/* Face */
+.kits-face{position:absolute;top:8px;left:2px;right:2px;height:34px;
+  background:rgba(252,248,255,0.97);border-radius:44% 44% 52% 52%;
+  box-shadow:inset 0 0 0 1px rgba(20,8,40,0.25)}
+
 /* Sigil */
-.kits-sigil{position:absolute;top:4px;left:50%;transform:translateX(-50%);
+.kits-sigil{position:absolute;top:2px;left:50%;transform:translateX(-50%);
   width:10px;height:10px;border-radius:50%;
-  border:1.5px solid rgba(155,92,246,0.8);
-  box-shadow:0 0 6px rgba(155,92,246,0.5);
-  animation:sigil-spin 4s linear infinite}
-@keyframes sigil-spin{to{box-shadow:0 0 6px rgba(155,92,246,0.5),0 0 12px rgba(155,92,246,0.3),inset 0 0 4px rgba(155,92,246,0.2)}}
-.kits-sigil::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:4px;height:4px;border-radius:50%;border:1px solid rgba(155,92,246,0.9)}
+  border:1.5px solid rgba(155,92,246,0.9);
+  box-shadow:0 0 5px rgba(155,92,246,0.7),0 0 12px rgba(155,92,246,0.2);
+  animation:sigil-pulse 2.5s ease-in-out infinite}
+.kits-sigil::before{content:'';position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);width:3.5px;height:3.5px;border-radius:50%;
+  border:1px solid rgba(155,92,246,0.95);box-shadow:0 0 3px rgba(155,92,246,0.8)}
+.kits-sigil::after{content:'✦';position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);font-size:3.5px;color:rgba(192,132,252,0.95);
+  animation:sigil-rot 4s linear infinite}
+@keyframes sigil-pulse{0%,100%{box-shadow:0 0 5px rgba(155,92,246,0.7)}50%{box-shadow:0 0 12px rgba(155,92,246,1),0 0 24px rgba(155,92,246,0.35)}}
+@keyframes sigil-rot{to{transform:translate(-50%,-50%) rotate(360deg)}}
+
+/* Under-eye swirl mark */
+.kits-eye-mark{position:absolute;top:16px;right:4px;width:5px;height:4px;
+  border-bottom:1.5px solid rgba(155,92,246,0.75);border-right:1px solid rgba(155,92,246,0.4);
+  border-radius:0 0 60% 40%}
+
 /* Eye */
-.kits-eye-wrap{position:absolute;top:10px;right:3px;width:14px;height:10px;
-  background:rgba(12,3,28,0.9);border-radius:40% 40% 50% 50%}
-.kits-eye{position:absolute;top:1px;left:2px;width:10px;height:8px;border-radius:50%;
-  background:radial-gradient(circle at 35% 35%,rgba(225,190,255,1),rgba(155,92,246,0.95),rgba(70,15,140,0.85));
-  box-shadow:0 0 4px rgba(155,92,246,0.7);animation:eye-glow 3s ease-in-out infinite}
-@keyframes eye-glow{0%,100%{box-shadow:0 0 4px rgba(155,92,246,0.7)}50%{box-shadow:0 0 8px rgba(155,92,246,1),0 0 16px rgba(155,92,246,0.4)}}
+.kits-eye-wrap{position:absolute;top:11px;right:3px;width:14px;height:10px;
+  background:rgba(8,1,20,0.93);border-radius:45% 45% 52% 52%}
+.kits-eye{position:absolute;top:1px;left:2px;width:10px;height:8px;
+  background:radial-gradient(circle at 30% 28%,rgba(235,205,255,1) 0%,rgba(155,92,246,0.95) 42%,rgba(55,8,110,0.9) 100%);
+  border-radius:50%;
+  box-shadow:0 0 6px rgba(155,92,246,0.9),0 0 12px rgba(155,92,246,0.35);
+  animation:eye-glow 3s ease-in-out infinite}
+.kits-eye::after{content:'';position:absolute;top:1px;right:1.5px;
+  width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,0.92);
+  box-shadow:0 0 2px rgba(255,255,255,0.5)}
+@keyframes eye-glow{0%,100%{box-shadow:0 0 6px rgba(155,92,246,0.9)}50%{box-shadow:0 0 12px rgba(155,92,246,1),0 0 24px rgba(155,92,246,0.5)}}
+
 /* Muzzle */
-.kits-muzzle{position:absolute;bottom:3px;right:2px;width:16px;height:10px;
-  background:rgba(245,240,255,0.9);border-radius:50% 50% 50% 50% / 40% 40% 60% 60%}
+.kits-muzzle{position:absolute;bottom:2px;right:1px;width:16px;height:11px;
+  background:rgba(248,243,255,0.93);border-radius:50% 50% 58% 58% / 40% 40% 68% 68%;
+  box-shadow:inset 0 0 0 0.8px rgba(20,8,40,0.22)}
+.kits-muzzle::after{content:'';position:absolute;top:2px;left:50%;transform:translateX(-50%);
+  width:3.5px;height:2.5px;border-radius:50%;background:rgba(22,6,40,0.75)}
 
 /* Moon charm */
-.kits-charm{position:absolute;right:-2px;top:32px;font-size:8px;color:rgba(232,201,122,0.9);
-  animation:charm-swing 2.5s ease-in-out infinite;transform-origin:top center}
-@keyframes charm-swing{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+.kits-charm{position:absolute;right:-5px;top:32px;font-size:8px;
+  color:rgba(232,201,122,0.92);text-shadow:0 0 6px rgba(232,201,122,0.8);
+  animation:charm-swing 3s ease-in-out infinite;transform-origin:top center;
+  display:flex;flex-direction:column;align-items:center;line-height:1}
+.kits-charm::before{content:'';display:block;width:1px;height:8px;
+  background:rgba(200,145,40,0.65);margin:0 auto}
+@keyframes charm-swing{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
 
-/* Embers */
+/* ── Embers ── */
 .hab-embers{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.ember{position:absolute;bottom:-4px;width:3px;height:3px;border-radius:50%;background:var(--col);
-  animation:ember-rise 4s ease-in infinite}
+.ember{position:absolute;bottom:-4px;width:2.5px;height:2.5px;border-radius:50%;
+  background:var(--col);box-shadow:0 0 3px var(--col);
+  animation:ember-rise var(--dur,4s) ease-in var(--del,0s) infinite}
 @keyframes ember-rise{
   0%{transform:translateY(0) translateX(0);opacity:0}
-  10%{opacity:1}
-  80%{opacity:0.6}
-  100%{transform:translateY(-180px) translateX(12px);opacity:0}
+  8%{opacity:1}
+  75%{opacity:0.7}
+  100%{transform:translateY(-200px) translateX(var(--dx,10px));opacity:0}
 }
 
 </style>
@@ -560,14 +632,16 @@ footer{text-align:center;padding:1.2rem 1rem;border-top:1px solid var(--borderdi
       </div>
       <!-- Embers -->
       <div class="hab-embers">
-        <div class="ember" style="left:8%;animation-delay:0s;--col:rgba(232,201,122,0.8)"></div>
-        <div class="ember" style="left:22%;animation-delay:1.2s;--col:rgba(192,132,252,0.7)"></div>
-        <div class="ember" style="left:41%;animation-delay:0.5s;--col:rgba(232,201,122,0.9)"></div>
-        <div class="ember" style="left:58%;animation-delay:2.1s;--col:rgba(192,132,252,0.8)"></div>
-        <div class="ember" style="left:71%;animation-delay:0.9s;--col:rgba(232,201,122,0.7)"></div>
-        <div class="ember" style="left:85%;animation-delay:1.7s;--col:rgba(192,132,252,0.9)"></div>
-        <div class="ember" style="left:33%;animation-delay:3.1s;--col:rgba(74,222,128,0.7)"></div>
-        <div class="ember" style="left:64%;animation-delay:2.6s;--col:rgba(232,201,122,0.8)"></div>
+        <div class="ember" style="left:8%;--col:rgba(232,201,122,0.8);--del:0s;--dur:4.2s;--dx:8px"></div>
+        <div class="ember" style="left:18%;--col:rgba(192,132,252,0.75);--del:1.1s;--dur:3.8s;--dx:-6px"></div>
+        <div class="ember" style="left:30%;--col:rgba(232,201,122,0.9);--del:0.5s;--dur:4.5s;--dx:12px"></div>
+        <div class="ember" style="left:43%;--col:rgba(192,132,252,0.8);--del:2.2s;--dur:3.6s;--dx:-8px"></div>
+        <div class="ember" style="left:55%;--col:rgba(103,232,249,0.65);--del:0.8s;--dur:4.8s;--dx:10px"></div>
+        <div class="ember" style="left:66%;--col:rgba(232,201,122,0.85);--del:1.6s;--dur:3.9s;--dx:-5px"></div>
+        <div class="ember" style="left:77%;--col:rgba(192,132,252,0.7);--del:3.0s;--dur:4.1s;--dx:7px"></div>
+        <div class="ember" style="left:88%;--col:rgba(232,201,122,0.8);--del:2.5s;--dur:4.4s;--dx:-9px"></div>
+        <div class="ember" style="left:12%;--col:rgba(74,222,128,0.55);--del:3.8s;--dur:5.0s;--dx:6px"></div>
+        <div class="ember" style="left:50%;--col:rgba(232,201,122,0.7);--del:1.9s;--dur:3.7s;--dx:-7px"></div>
       </div>
       <!-- Commerce event flash -->
       <div class="hc-flash" id="hab-flash"></div>
