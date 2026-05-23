@@ -1577,7 +1577,9 @@ function initFx(){
    HABITAT CANVAS — Night Market
 ════════════════════════════════════════════════════════ */
 function initHabitat(){
-  const c=document.getElementById('habitat-canvas'),ctx=c.getContext('2d');
+  // Show any crash visually in the canvas label
+  const hcTxt = document.getElementById('hc-txt');
+  try{
   const cont=c.parentElement;
   function resize(){c.width=cont.offsetWidth||363;c.height=cont.offsetHeight||210;buildCity();}
 setTimeout(resize,100);
@@ -2307,6 +2309,22 @@ setTimeout(resize,100);
     try{spawnAmbient();}catch(e){}
     requestAnimationFrame(loop);
   })();
+  }catch(initErr){
+    console.error('[initHabitat CRASH]', initErr.message, initErr.stack);
+    if(hcTxt) hcTxt.textContent = 'ERR: '+initErr.message.slice(0,60);
+    // Still draw something so canvas isn't blank
+    const c2=document.getElementById('habitat-canvas');
+    if(c2){
+      const ctx2=c2.getContext('2d');
+      c2.width=c2.parentElement.offsetWidth||363;
+      c2.height=c2.parentElement.offsetHeight||210;
+      ctx2.fillStyle='rgba(255,50,50,0.5)';
+      ctx2.fillRect(0,0,c2.width,c2.height);
+      ctx2.fillStyle='white';ctx2.font='12px monospace';ctx2.textAlign='left';
+      ctx2.fillText('initHabitat error - see console',10,30);
+      ctx2.fillText(initErr.message.slice(0,50),10,50);
+    }
+  }
 }
 
 /* ════════════════════════════════════════════════════════
