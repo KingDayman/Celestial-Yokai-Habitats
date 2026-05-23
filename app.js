@@ -130,8 +130,16 @@ async function getPrintifyShopId() {
   if (printifyStore.shopId) return printifyStore.shopId;
   const shops = await printifyFetch("/shops.json");
   if (!Array.isArray(shops)||!shops.length) throw new Error("No Printify shops found");
-  printifyStore.shopId   = shops[0].id;
-  printifyStore.shopTitle = shops[0].title;
+  console.log("[Printify] Available shops:", shops.map(s=>s.id+":"+s.title).join(", "));
+  // Prefer the shop connected to Etsy (sales_channel contains 'etsy')
+  const etsyShop = shops.find(s =>
+    (s.sales_channel||"").toLowerCase().includes("etsy") ||
+    (s.title||"").toLowerCase().includes("etsy")
+  );
+  const shop = etsyShop || shops[0];
+  console.log("[Printify] Using shop:", shop.id, shop.title);
+  printifyStore.shopId   = shop.id;
+  printifyStore.shopTitle = shop.title;
   return printifyStore.shopId;
 }
 
@@ -415,8 +423,21 @@ app.post("/api/printify/publish-to-etsy", async (req, res) => {
   if (!printifyProductId) return res.status(400).json({ error: "printifyProductId required" });
 
   try {
+    // Force re-fetch shops to pick up the Etsy-connected shop
+    printifyStore.shopId = null;
     const shopId = await getPrintifyShopId();
     console.log("[Printify→Etsy] Publishing product", printifyProductId, "from shop", shopId);
+    // Verify product exists in this shop first
+    try {
+      const prod = await printifyFetch("/shops/" + shopId + "/products/" + printifyProductId + ".json");
+      console.log("[Printify→Etsy] Product verified:", prod.id, prod.title);
+    } catch(checkErr) {
+      // Product not in this shop — list all shops and their products
+      const allShops = await printifyFetch("/shops.json");
+      console.error("[Printify→Etsy] Product", printifyProductId, "not found in shop", shopId);
+      console.error("[Printify→Etsy] All shops:", JSON.stringify(allShops.map(s=>({id:s.id,title:s.title}))));
+      throw new Error("Product " + printifyProductId + " not found in Printify shop " + shopId + ". The product may have been created in a different shop. Please run the wizard again to create a new product.");
+    }
 
     // Use Printify's native publish endpoint — creates a real physical Etsy listing
     // with Printify fulfillment, mockup images, and all variants attached automatically.
