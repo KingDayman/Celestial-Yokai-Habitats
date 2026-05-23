@@ -1579,7 +1579,8 @@ function initFx(){
 function initHabitat(){
   const c=document.getElementById('habitat-canvas'),ctx=c.getContext('2d');
   const cont=c.parentElement;
-  function resize(){c.width=cont.offsetWidth;c.height=cont.offsetHeight;buildCity();}
+  function resize(){c.width=cont.offsetWidth||363;c.height=cont.offsetHeight||210;buildCity();}
+setTimeout(resize,100);
   resize();addEventListener('resize',resize);
   const W=()=>c.width,H=()=>c.height;
   let tick=0;
@@ -1932,12 +1933,14 @@ function initHabitat(){
 
   function drawFox(){
     const w=W(),h=H();
-    if(!w||!h)return;
+    if(!w||!h){console.warn("[Kitsari] canvas 0 size w="+w+" h="+h);return;}
     const sc=Math.min(h/260, w/300); // scale to canvas
     const S=n=>n*sc;
     const cx=fox.x*w;
     const cy=fox.y*h - S(10); // shift up slightly so feet land on ground
 
+    // Test: bright magenta dot proves drawFox is running
+    ctx.fillStyle="rgba(255,0,200,0.9)";ctx.beginPath();ctx.arc(20,20,8,0,Math.PI*2);ctx.fill();
     fox.breathPhase+=0.022;
     const bob=(fox.state==='walk'?Math.sin(fox.frame*0.7)*S(2):0) + Math.sin(fox.breathPhase)*S(1.5);
     fox.tail+=0.025;
