@@ -127,20 +127,15 @@ async function printifyFetch(ep, opts={}) {
 }
 
 async function getPrintifyShopId() {
-  if (printifyStore.shopId) return printifyStore.shopId;
-  const shops = await printifyFetch("/shops.json");
-  if (!Array.isArray(shops)||!shops.length) throw new Error("No Printify shops found");
-  console.log("[Printify] Available shops:", shops.map(s=>s.id+":"+s.title).join(", "));
-  // Prefer the shop connected to Etsy (sales_channel contains 'etsy')
-  const etsyShop = shops.find(s =>
-    (s.sales_channel||"").toLowerCase().includes("etsy") ||
-    (s.title||"").toLowerCase().includes("etsy")
-  );
-  const shop = etsyShop || shops[0];
-  console.log("[Printify] Using shop:", shop.id, shop.title);
-  printifyStore.shopId   = shop.id;
-  printifyStore.shopTitle = shop.title;
-  return printifyStore.shopId;
+  // Always use the Etsy-connected Printify shop (id=27645497, title="My Etsy Store")
+  // This is the only shop with sales_channel="etsy" — products created here
+  // automatically sync to Etsy when published via Printify.
+  const ETSY_SHOP_ID = 27645497;
+  if (printifyStore.shopId === ETSY_SHOP_ID) return ETSY_SHOP_ID;
+  printifyStore.shopId   = ETSY_SHOP_ID;
+  printifyStore.shopTitle = "My Etsy Store";
+  console.log("[Printify] Using Etsy-connected shop id=" + ETSY_SHOP_ID);
+  return ETSY_SHOP_ID;
 }
 
 // ── Catalog ───────────────────────────────────────────────────────────────────
@@ -376,15 +371,40 @@ app.get("/api/printify/blueprint-info/:blueprintId?", async (req, res) => {
       vlist = Array.isArray(vr)?vr:(Array.isArray(vr?.variants)?vr.variants:[]);
       if (vlist.length){used=prov;break;}
     }
-    if (!vlist.length) return res.status(404).json({error:`No variants for blueprint ${bpId}`});
-    const v=vlist[0];
-    res.json({blueprintId:bpId,provider:{id:used.id,title:used.title,score:used._score,location:used.location?.country||"?"},variant:{id:v.id,title:v.title||(v.options?Object.values(v.options).join("/"):`Variant ${v.id}`)},variantCount:vlist.length,allProviders:scored.map(p=>({id:p.id,title:p.title,score:p._score,location:p.location?.country||"?"}))});
+    if (!vlist.length) return res.status(404).json({error:"No variants for blueprint " + bpId});
+    const v = vlist[0];
+    const allVariantIds = vlist.map(v2 => v2.id);
+    const vTitle = v.title || (v.options ? Object.values(v.options).join("/") : "Variant " + v.id);
+    console.log("[Printify] blueprint", bpId, "has", vlist.length, "variants — all will be enabled");
+    res.json({
+      blueprintId: bpId,
+      provider: {id:used.id, title:used.title, score:used._score, location:used.location?.country||"?"},
+      variant: {id:v.id, title:vTitle},
+      variantCount: vlist.length,
+      allVariantIds,
+      allProviders: scored.map(p=>({id:p.id, title:p.title, score:p._score, location:p.location?.country||"?"}))
+    });
   } catch(e) { res.status(500).json({error:e.message}); }
 });
 
 app.get("/api/printify/products", async (req, res) => {
   try { const sid=await getPrintifyShopId(); res.json(await printifyFetch(`/shops/${sid}/products.json?limit=20&page=1`)); }
   catch(e) { res.status(500).json({error:e.message}); }
+});
+
+// Search ALL shops for all products — use this to find where products ended up
+app.get("/api/printify/all-products", async (req, res) => {
+  try {
+    const shops = await printifyFetch("/shops.json");
+    const result = [];
+    for (const shop of shops) {
+      try {
+        const prods = await printifyFetch(`/shops/${shop.id}/products.json?limit=20`);
+        result.push({ shopId: shop.id, shopTitle: shop.title, products: (prods.data||prods||[]).map(p=>({id:p.id,title:p.title,created:p.created_at})) });
+      } catch(e) { result.push({ shopId: shop.id, shopTitle: shop.title, error: e.message }); }
+    }
+    res.json(result);
+  } catch(e) { res.status(500).json({error:e.message}); }
 });
 
 app.post("/api/printify/upload-image", async (req, res) => {
@@ -399,22 +419,38 @@ app.post("/api/printify/upload-image", async (req, res) => {
 });
 
 app.post("/api/printify/create-product", async (req, res) => {
-  const {title,description,blueprintId,printProviderId,variantId,printifyImageId,price:p} = req.body;
+  const {title,description,blueprintId,printProviderId,variantId,allVariantIds,printifyImageId,price:p} = req.body;
   if (!title)           return res.status(400).json({error:"title required"});
   if (!blueprintId)     return res.status(400).json({error:"blueprintId required"});
   if (!printProviderId) return res.status(400).json({error:"printProviderId required"});
   if (!variantId)       return res.status(400).json({error:"variantId required"});
   if (!printifyImageId) return res.status(400).json({error:"printifyImageId required — upload artwork first"});
-  const bpId=parseInt(blueprintId),prvId=parseInt(printProviderId),varId=parseInt(variantId);
-  console.log(`[Printify] create-product bp=${bpId} prv=${prvId} var=${varId} img=${printifyImageId}`);
+  const bpId = parseInt(blueprintId);
+  const prvId = parseInt(printProviderId);
+  const varId = parseInt(variantId);
+  // Use all variant IDs if provided (all sizes/colors), else fall back to single
+  const variantIds = (Array.isArray(allVariantIds) && allVariantIds.length > 0)
+    ? allVariantIds.map(id => parseInt(id))
+    : [varId];
+  const priceInCents = Math.round((parseFloat(p) || 18) * 100);
+  console.log("[Printify] create-product bp=" + bpId + " prv=" + prvId + " variants=" + variantIds.length + " img=" + printifyImageId);
   try {
     const sid = await getPrintifyShopId();
-    const prod = await printifyFetch(`/shops/${sid}/products.json`,{method:"POST",body:JSON.stringify({
-      title:title.slice(0,140),description:description||title,blueprint_id:bpId,print_provider_id:prvId,
-      variants:[{id:varId,price:Math.round((parseFloat(p)||18)*100),is_enabled:true}],
-      print_areas:[{variant_ids:[varId],placeholders:[{position:"front",images:[{id:printifyImageId,x:0.5,y:0.5,scale:1,angle:0}]}]}],
-    })});
-    res.json({success:true,printifyProductId:prod.id,title:prod.title,blueprintId:bpId,printProviderId:prvId,variantId:varId});
+    const prod = await printifyFetch("/shops/" + sid + "/products.json", {
+      method: "POST",
+      body: JSON.stringify({
+        title:             title.slice(0, 140),
+        description:       description || title,
+        blueprint_id:      bpId,
+        print_provider_id: prvId,
+        variants:          variantIds.map(id => ({id, price: priceInCents, is_enabled: true})),
+        print_areas: [{
+          variant_ids:  variantIds,
+          placeholders: [{position: "front", images: [{id: printifyImageId, x: 0.5, y: 0.5, scale: 1, angle: 0}]}],
+        }],
+      }),
+    });
+    res.json({success:true, printifyProductId:prod.id, title:prod.title, blueprintId:bpId, printProviderId:prvId, variantCount:variantIds.length});
   } catch(e) { res.status(500).json({error:e.message,debug:{blueprintId:bpId,printProviderId:prvId,variantId:varId,imageId:printifyImageId}}); }
 });
 
