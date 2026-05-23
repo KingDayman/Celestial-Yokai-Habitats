@@ -1577,8 +1577,9 @@ function initFx(){
    HABITAT CANVAS — Night Market
 ════════════════════════════════════════════════════════ */
 function initHabitat(){
-  // Show any crash visually in the canvas label
-  const hcTxt = document.getElementById('hc-txt');
+  const c=document.getElementById('habitat-canvas');
+  const ctx=c.getContext('2d');
+  const hcTxt=document.getElementById('hc-txt');
   try{
   const cont=c.parentElement;
   function resize(){c.width=cont.offsetWidth||363;c.height=cont.offsetHeight||210;buildCity();}
