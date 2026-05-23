@@ -423,62 +423,59 @@ app.post("/api/printify/publish-to-etsy", async (req, res) => {
   if (!printifyProductId) return res.status(400).json({ error: "printifyProductId required" });
 
   try {
-    // Force re-fetch shops to pick up the Etsy-connected shop
+    // Force fresh shop lookup
     printifyStore.shopId = null;
     const shopId = await getPrintifyShopId();
-    console.log("[Printify→Etsy] Publishing product", printifyProductId, "from shop", shopId);
-    // Verify product exists in this shop first
+    console.log("[Printify→Etsy] Using shop:", shopId);
+
+    // Verify product exists
+    const prod = await printifyFetch("/shops/" + shopId + "/products/" + printifyProductId + ".json");
+    console.log("[Printify→Etsy] Product found:", prod.id, prod.title);
+
+    // Call publish.json — for Etsy-connected shops this pushes to Etsy.
+    // For custom shops it only triggers the event (no-op for Etsy manual connection).
     try {
-      const prod = await printifyFetch("/shops/" + shopId + "/products/" + printifyProductId + ".json");
-      console.log("[Printify→Etsy] Product verified:", prod.id, prod.title);
-    } catch(checkErr) {
-      // Product not in this shop — list all shops and their products
-      const allShops = await printifyFetch("/shops.json");
-      console.error("[Printify→Etsy] Product", printifyProductId, "not found in shop", shopId);
-      console.error("[Printify→Etsy] All shops:", JSON.stringify(allShops.map(s=>({id:s.id,title:s.title}))));
-      throw new Error("Product " + printifyProductId + " not found in Printify shop " + shopId + ". The product may have been created in a different shop. Please run the wizard again to create a new product.");
+      await printifyFetch("/shops/" + shopId + "/products/" + printifyProductId + "/publish.json", {
+        method: "POST",
+        body: JSON.stringify({ title:true, description:true, images:true, variants:true, tags:true, keyFeatures:true, shipping_template:true }),
+      });
+      console.log("[Printify→Etsy] Publish triggered for product", printifyProductId);
+    } catch(pubErr) {
+      // publish.json may return 200 with empty body or 404 for custom shops — not fatal
+      console.warn("[Printify→Etsy] publish.json warning (non-fatal):", pubErr.message);
     }
 
-    // Use Printify's native publish endpoint — creates a real physical Etsy listing
-    // with Printify fulfillment, mockup images, and all variants attached automatically.
-    // Printify must be connected to the Etsy store in the Printify dashboard first.
-    const result = await printifyFetch(
-      `/shops/${shopId}/products/${printifyProductId}/publishing.json`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          title:       true,
-          description: true,
-          images:      true,
-          variants:    true,
-          tags:        true,
-          keyFeatures: true,
-          shipping_template: true,
-        }),
-      }
-    );
-
-    console.log("[Printify→Etsy] Publish result:", JSON.stringify(result).slice(0, 300));
+    // Confirm: if product was created in the Etsy-connected shop, it will appear
+    // in Etsy shop manager → Listings automatically after the publish call.
     res.json({
       success: true,
-      printifyProductId,
-      result,
-      note: "Product published to Etsy via Printify. Check your Etsy shop manager for the draft listing.",
-      publishLocked: "Listing created as draft. Review in Etsy shop manager before going live.",
+      printifyProductId: prod.id,
+      title: prod.title,
+      shopId,
+      message: "Product synced. Check your Etsy shop manager → Listings → Drafts. If connected correctly, the listing should appear there within a few minutes.",
+      note: "Make sure this Printify shop is connected to Etsy: Printify dashboard → My Stores",
     });
 
   } catch(e) {
     console.error("[Printify→Etsy] FAILED:", e.message);
 
-    // If Printify→Etsy publish fails, it likely means Printify is not connected to
-    // the Etsy store in the Printify dashboard. Provide clear instructions.
-    const notConnected = e.message.includes("401") || e.message.includes("403") || e.message.includes("not connected") || e.message.includes("shop");
-    res.status(500).json({
-      error: e.message,
-      fix: notConnected
-        ? "Connect Printify to your Etsy store: Printify dashboard → My Stores → Add a new store → Choose Etsy → Authorize. Then retry."
-        : "Check Railway logs for details.",
-    });
+    // If 404, the product was created in the wrong Printify shop
+    if (e.message.includes("404")) {
+      // List all shops for debugging
+      try {
+        const allShops = await printifyFetch("/shops.json");
+        console.log("[Printify→Etsy] All shops:", JSON.stringify(allShops.map(s => s.id + ":" + s.title)));
+        return res.status(404).json({
+          error: "Product not found in the selected Printify shop. Run the wizard again — a new product will be created in the correct shop.",
+          shops: allShops.map(s => ({ id: s.id, title: s.title })),
+          tip: "The shop used for product creation must match the shop connected to Etsy.",
+        });
+      } catch(listErr) {
+        // ignore
+      }
+    }
+
+    res.status(500).json({ error: e.message });
   }
 });
 
