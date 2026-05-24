@@ -88,8 +88,7 @@ function makeChallenge(v){ return b64url(crypto.createHash("sha256").update(v).d
 async function etsyFetch(ep, opts={}) {
   if (!etsyStore.accessToken) throw new Error("Etsy not connected — reconnect via /api/etsy/connect");
   if (!ETSY_API_KEY) throw new Error("ETSY_API_KEY not set in Railway env vars");
-  // TEMP FULL KEY LOG — remove after fixing 403
-  console.log("[etsyFetch] ep=" + ep + " x-api-key=" + ETSY_API_KEY + " token-start=" + (etsyStore.accessToken||" ").slice(0,12));
+  console.log("[etsyFetch] ep=" + ep);
   const r = await fetch("https://openapi.etsy.com/v3" + ep, {
     ...opts,
     headers: {
@@ -243,17 +242,16 @@ app.get("/api/etsy/connect", (req, res) => {
   etsyStore.state        = state;
   etsyStore.codeVerifier = ver;
 
-  const params = new URLSearchParams({
-    response_type:         "code",
-    redirect_uri:          ETSY_REDIRECT,
-    scope:                 "listings_r listings_w shops_r transactions_r",
-    client_id:             ETSY_API_KEY,
-    state,
-    code_challenge:        makeChallenge(ver),
-    code_challenge_method: "S256",
-  });
-
-  const authUrl = "https://www.etsy.com/oauth/connect?" + params.toString();
+  // Build URL manually to ensure scope uses %20 not +
+  const scope = "listings_r%20listings_w%20shops_r%20transactions_r";
+  const authUrl = "https://www.etsy.com/oauth/connect?" +
+    "response_type=code" +
+    "&redirect_uri=" + encodeURIComponent(ETSY_REDIRECT) +
+    "&scope=" + scope +
+    "&client_id=" + ETSY_API_KEY +
+    "&state=" + state +
+    "&code_challenge=" + makeChallenge(ver) +
+    "&code_challenge_method=S256";
   console.log("[Etsy] Redirecting — redirect_uri=" + ETSY_REDIRECT);
   res.redirect(authUrl);
 });
