@@ -179,7 +179,7 @@ NFT UTILITY: Holder discounts, trait variants, early access, secret pages where 
 FORMAT: Markdown. End every response with: ✦ Kitsari — Lantern District`;
 
 async function ask(prompt, max=1600) {
-  const m = await anthropic.messages.create({ model:"claude-opus-4-5", max_tokens:max, system:SYS, messages:[{role:"user",content:prompt}] });
+  const m = await anthropic.messages.create({ model:"claude-sonnet-4-20250514", max_tokens:max, system:SYS, messages:[{role:"user",content:prompt}] });
   return m.content.filter(b=>b.type==="text").map(b=>b.text).join("\n");
 }
 
@@ -578,6 +578,9 @@ app.post("/api/agent/kitsari", async (req, res) => {
 });
 
 app.post("/api/commerce/generate-product", async (req, res) => {
+  // Keep connection alive during long AI generation
+  res.setHeader("X-Accel-Buffering", "no");
+  req.setTimeout(120000); // 2 min timeout
   const {productType="sticker",theme,stickerStyle,nftAngle} = req.body;
   const ctx = productType==="sticker"?`PRODUCT TYPE: Kiss-cut vinyl sticker\nSTICKER STYLE: ${stickerStyle||"sigil"}\nFormat: die-cut.`:productType==="poster"?`PRODUCT TYPE: Art print/poster.`:`PRODUCT TYPE: T-shirt.`;
   const prompt = `Generate a complete Celestial Yokai product draft.\n${ctx}\nTHEME: ${theme||"Kitsari/Lantern District"}\nNFT UTILITY: ${nftAngle||"holder variant"}\n\nGenerate:\n## PRODUCT NAME\n## LORE ANGLE\n## TARGET BUYER\n## ETSY SEO TITLE\n## DESCRIPTION\n## 13 ETSY TAGS\n## PRICING SUGGESTION\n## PRINTIFY PRODUCT MATCH\n## MOCKUP ART DIRECTION\n## X LAUNCH POST\n## NFT HOLDER UTILITY`;
