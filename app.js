@@ -453,9 +453,12 @@ app.post("/api/printify/create-product", async (req, res) => {
   const varId = parseInt(variantId);
 
   // Use all variant IDs if provided (all sizes/colors), else just the one
-  const variantIds = (Array.isArray(allVariantIds) && allVariantIds.length > 0)
+  // Printify max 100 variants per product
+  const rawIds = (Array.isArray(allVariantIds) && allVariantIds.length > 0)
     ? allVariantIds.map(id => parseInt(id))
     : [varId];
+  const variantIds = rawIds.slice(0, 100);
+  if (rawIds.length > 100) console.log("[Printify] Capped variants from", rawIds.length, "to 100");
 
   const priceInCents = Math.round((parseFloat(p) || 18) * 100);
   const sid = getPrintifyShopId(); // always 27645497
