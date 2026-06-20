@@ -501,20 +501,35 @@ app.post("/api/printify/publish-to-etsy", async (req, res) => {
     const prod = await printifyFetch("/shops/" + shopId + "/products/" + printifyProductId + ".json");
     console.log("[Printify→Etsy] Product found:", prod.id, prod.title);
 
-    // Call Printify's publish endpoint
+    // Call Printify's publish endpoint — publishes to connected Etsy store
+    let publishResult = null;
+    let publishError = null;
     try {
-      await printifyFetch("/shops/" + shopId + "/products/" + printifyProductId + "/publish.json", {
+      publishResult = await printifyFetch("/shops/" + shopId + "/products/" + printifyProductId + "/publish.json", {
         method: "POST",
         body: JSON.stringify({ title: true, description: true, images: true, variants: true, tags: true, keyFeatures: true, shipping_template: true }),
       });
+      console.log("[Printify→Etsy] publish.json result:", JSON.stringify(publishResult).slice(0, 200));
     } catch (pubErr) {
-      console.warn("[Printify→Etsy] publish.json warning (may be non-fatal):", pubErr.message);
+      publishError = pubErr.message;
+      console.error("[Printify→Etsy] publish.json FAILED:", pubErr.message);
+    }
+
+    // If publish failed, return error so user knows to check Printify manually
+    if (publishError) {
+      return res.status(500).json({
+        error: "Printify publish failed: " + publishError,
+        fix: "Go to printify.com/app/products → find your product → click Publish → select Etsy. Make sure Printify is connected to your Etsy store under My Stores.",
+        productCreated: true,
+        printifyProductId: prod.id,
+        printifyDashboard: "https://printify.com/app/products",
+      });
     }
 
     res.json({
       success: true, printifyProductId: prod.id, title: prod.title, shopId,
-      message: "Product published. Check Printify dashboard → My Products → Publish to push to Etsy.",
-      note: "Printify must be connected to Etsy: Printify dashboard → My Stores",
+      publishResult,
+      message: "Product published to Etsy via Printify. Check your Etsy shop manager → Listings.",
     });
   } catch (e) {
     console.error("[Printify→Etsy] FAILED:", e.message);
