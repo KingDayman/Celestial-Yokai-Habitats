@@ -967,10 +967,25 @@ async function runStage4(){
       disableBtn('stage4-btn',false,'SYNC TO ETSY DRAFT ✦');
       return;
     }
+
+    // If publish failed but product was created — show Printify link
+    if(!r.ok && d.productCreated){
+      wizardState.printifyProductId=d.printifyProductId;
+      setSyncStep('ss-etsy','error','Publish failed — manual step needed');
+      const banner=document.getElementById('success-banner');if(banner)banner.style.display='block';
+      const link=document.getElementById('etsy-draft-link');
+      if(link){link.href=d.printifyDashboard||'https://printify.com/app/products';
+        link.textContent='PUBLISH IN PRINTIFY DASHBOARD';link.style.display='inline-block';}
+      document.querySelector('#success-banner .sb-title').textContent='PRODUCT CREATED IN PRINTIFY';
+      document.querySelector('#success-banner .sb-txt').textContent=d.fix||'Go to Printify dashboard and publish to Etsy manually.';
+      showErr('stage5-err',d.error);
+      return;
+    }
+
     if(!r.ok)throw new Error(d.error||'Etsy sync failed');
 
     wizardState.etsyListingId=d.listingId||d.printifyProductId||'—';
-    setSyncStep('ss-etsy','done','Sync complete ✓ id='+(d.listingId||d.printifyProductId));
+    setSyncStep('ss-etsy','done','Sync complete ✓');
     const banner=document.getElementById('success-banner');if(banner)banner.style.display='block';
     const link=document.getElementById('etsy-draft-link');
     if(d.etsyUrl&&link){link.href=d.etsyUrl;link.style.display='inline-block';}
