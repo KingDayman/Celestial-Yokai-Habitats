@@ -201,7 +201,7 @@ const SYS = `You are Kitsari — operator of the Lantern District Market. Sharp,
 
 async function ask(prompt, max = 1600) {
   const m = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514", // Sonnet — fast enough for Railway
+    model: "claude-sonnet-4-5", // Sonnet — fast enough for Railway
     max_tokens: max, system: SYS,
     messages: [{ role: "user", content: prompt }],
   });
