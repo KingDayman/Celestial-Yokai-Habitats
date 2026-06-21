@@ -357,7 +357,7 @@ function showErr(id,m){const el=document.getElementById(id);if(el){el.textConten
 function showOk(id,m){const el=document.getElementById(id);if(el){el.textContent=m;el.style.display='block';}}
 function hideErr(id){hide(id);}
 function loading(id,show){const el=document.getElementById(id);if(el)el.classList[show?'add':'remove']('show');}
-function getHeader(){return {'Content-Type':'application/json','Authorization':'Bearer '+(currentSession?.token||'')};}
+function getHeader(){return {'Content-Type':'application/json'};} // Cookie handles auth automatically
 
 // ── Tab switching ─────────────────────────────────
 function setTab(name, el){
@@ -374,43 +374,39 @@ function setTab(name, el){
 // ── Auth flow ─────────────────────────────────────
 window.addEventListener('load', async () => {
   const params = new URLSearchParams(location.search);
-  const auth   = params.get('auth');
-  const sess   = params.get('sess');
-  const user   = params.get('user');
+  const auth = params.get('auth');
 
-  // Handle OAuth return
+  // Always clean the URL
+  if(location.search) history.replaceState({}, '', '/holder');
+
+  // Check existing session via cookie (backend reads it automatically)
+  try{
+    const r = await fetch('/api/auth/me');
+    const d = await r.json();
+    if(d.loggedIn){
+      if(d.isHolder || d.isAdmin){
+        currentSession = d;
+        showDashboard();
+        return;
+      } else {
+        // Logged in but not a holder
+        show('not-holder-msg');
+        document.getElementById('panel-login').classList.add('active');
+        return;
+      }
+    }
+  }catch(e){ console.warn('Session check failed:', e.message); }
+
+  // No session — show login
   if(auth === 'not_holder'){
-    history.replaceState({}, '', '/holder');
     show('not-holder-msg');
-    show('panel-login');
-    return;
   }
   if(auth === 'error'){
     const reason = params.get('reason') || 'Unknown error';
     document.getElementById('login-err').textContent = 'Login failed: ' + reason;
     show('login-err');
-    history.replaceState({}, '', '/holder');
-    return;
   }
-  if(auth === 'success' && sess){
-    history.replaceState({}, '', '/holder');
-    // Validate session
-    try{
-      const r = await fetch('/api/auth/me', {headers:{'Authorization':'Bearer '+sess}});
-      const d = await r.json();
-      if(d.loggedIn && d.isHolder){
-        currentSession = {...d, token: sess};
-        showDashboard();
-        return;
-      }
-    }catch(e){}
-    show('not-holder-msg');
-    return;
-  }
-
-  // Check for existing session in URL or prompt login
-  // No persistent cookie — URL param only for now
-  show('panel-login');
+  document.getElementById('panel-login').classList.add('active');
 });
 
 function showDashboard(){
@@ -448,7 +444,7 @@ function showDashboard(){
 }
 
 async function logout(){
-  try{ await fetch('/api/auth/logout',{method:'POST',headers:getHeader()}); }catch(e){}
+  try{ await fetch('/api/auth/logout',{method:'POST'}); }catch(e){}
   currentSession = null;
   location.href = '/holder';
 }
