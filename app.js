@@ -669,9 +669,19 @@ const SESSION_TTL    = 24 * 60 * 60 * 1000; // 24 hours
 function makeSessionToken() {
   return crypto.randomBytes(32).toString("hex");
 }
+function parseCookies(req) {
+  const out = {};
+  const h = req.headers.cookie || "";
+  h.split(";").forEach(p => {
+    const idx = p.indexOf("=");
+    if (idx > 0) out[p.slice(0, idx).trim()] = decodeURIComponent(p.slice(idx + 1).trim());
+  });
+  return out;
+}
 function getSession(req) {
+  const cookies = parseCookies(req);
   const auth = req.headers["authorization"] || "";
-  const token = auth.replace("Bearer ", "").trim() || req.query._sess;
+  const token = auth.replace("Bearer ", "").trim() || cookies["kitsari_sess"] || req.query._sess;
   if (!token) return null;
   const sess = holderSessions[token];
   if (!sess) return null;
@@ -843,14 +853,16 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     // Log the numeric ID so admin can set DISCORD_ADMIN_ID
     console.log("[Discord Auth] LOGIN COMPLETE — Discord numeric ID:", user.id, "| username:", user.username);
 
+    const cookieOpts = "; Path=/; Max-Age=604800; SameSite=Lax; HttpOnly";
+
     if (!hasWanderer && !isAdmin) {
-      // Not a holder — redirect with token so they can see the "not a holder" screen
-      // Still issue limited session so we can show them a proper message
       holderSessions[sessionToken].isHolder = false;
-      return res.redirect("/?auth=not_holder&sess=" + sessionToken + "&user=" + encodeURIComponent(user.global_name || user.username));
+      res.setHeader("Set-Cookie", "kitsari_sess=" + sessionToken + cookieOpts);
+      return res.redirect("/holder?auth=not_holder");
     }
 
-    res.redirect("/?auth=success&sess=" + sessionToken);
+    res.setHeader("Set-Cookie", "kitsari_sess=" + sessionToken + cookieOpts);
+    res.redirect("/holder?auth=success");
   } catch (err) {
     console.error("[Discord Auth] Error:", err.message);
     res.redirect("/?auth=error&reason=" + encodeURIComponent(err.message));
@@ -903,7 +915,14 @@ app.get("/api/auth/me", (req, res) => {
 app.post("/api/auth/logout", (req, res) => {
   const sess = getSession(req);
   if (sess) delete holderSessions[sess.token];
+  res.setHeader("Set-Cookie", "kitsari_sess=; Path=/; Max-Age=0");
   res.json({ loggedOut: true });
+});
+app.get("/api/auth/logout", (req, res) => {
+  const sess = getSession(req);
+  if (sess) delete holderSessions[sess.token];
+  res.setHeader("Set-Cookie", "kitsari_sess=; Path=/; Max-Age=0");
+  res.redirect("/holder");
 });
 
 // ════════════════════════════════════════════════════════════════════════
