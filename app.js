@@ -150,9 +150,16 @@ async function printifyFetch(ep, opts = {}) {
   return r.json();
 }
 
-function getPrintifyShopId() {
-  // Hardcoded to Etsy-connected shop — never use 27557217 (disconnected)
-  return 27645497;
+async function getPrintifyShopId() {
+  // Always fetch live — find the shop connected to Etsy
+  const shops = await printifyFetch('/shops.json');
+  if (!Array.isArray(shops) || !shops.length) throw new Error('No Printify shops found');
+  console.log('[Printify] Shops:', shops.map(s => s.id + ':' + s.title + '(' + s.sales_channel + ')').join(', '));
+  // Prefer Etsy-connected shop
+  const etsy = shops.find(s => (s.sales_channel||'').toLowerCase().includes('etsy'));
+  const shop = etsy || shops[0];
+  console.log('[Printify] Using shop:', shop.id, shop.title, shop.sales_channel);
+  return shop.id;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -342,7 +349,7 @@ app.get("/api/printify/status", async (req, res) => {
     if (Array.isArray(shops) && shops.length) {
       printifyStore.shopId = shops[0].id; printifyStore.shopTitle = shops[0].title;
     }
-    res.json({ connected: true, shopCount: Array.isArray(shops) ? shops.length : 0, shops: (Array.isArray(shops) ? shops : []).map(s => ({ id: s.id, title: s.title, sales_channel: s.sales_channel })), activeShopId: getPrintifyShopId() });
+    res.json({ connected: true, shopCount: Array.isArray(shops) ? shops.length : 0, shops: (Array.isArray(shops) ? shops : []).map(s => ({ id: s.id, title: s.title, sales_channel: s.sales_channel })), activeShopId: "dynamic" });
   } catch (e) {
     clearTimeout(timer); if (!res.headersSent) res.json({ connected: false, message: e.message });
   }
@@ -416,7 +423,7 @@ app.get("/api/printify/blueprint-info/:blueprintId?", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════
 app.get("/api/printify/products", async (req, res) => {
   try {
-    const sid = getPrintifyShopId();
+    const sid = await getPrintifyShopId();
     res.json(await printifyFetch(`/shops/${sid}/products.json?limit=20`));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -461,7 +468,7 @@ app.post("/api/printify/create-product", async (req, res) => {
   if (rawIds.length > 100) console.log("[Printify] Capped variants from", rawIds.length, "to 100");
 
   const priceInCents = Math.round((parseFloat(p) || 18) * 100);
-  const sid = getPrintifyShopId(); // always 27645497
+  const sid = await getPrintifyShopId(); // always 27645497
 
   console.log("[Printify] create-product bp=" + bpId + " prv=" + prvId + " variants=" + variantIds.length + " img=" + printifyImageId + " shop=" + sid);
 
@@ -493,7 +500,7 @@ app.post("/api/printify/publish-to-etsy", async (req, res) => {
   const { printifyProductId } = req.body;
   if (!printifyProductId) return res.status(400).json({ error: "printifyProductId required" });
 
-  const shopId = getPrintifyShopId();
+  const shopId = await getPrintifyShopId();
   console.log("[Printify→Etsy] Publishing", printifyProductId, "from shop", shopId);
 
   try {
