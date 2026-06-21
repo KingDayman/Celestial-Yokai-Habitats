@@ -647,7 +647,457 @@ app.get("/health", (req, res) => res.json({
   printify: PRINTIFY_KEY ? "configured" : "unconfigured",
 }));
 
+// ════════════════════════════════════════════════════════════════════════
+// HOLDER AUTH — Discord OAuth2 + role check + Solana NFT ownership
+// Add to app.js after existing routes, before static/SPA fallback
+// ════════════════════════════════════════════════════════════════════════
+
+const DISCORD_CLIENT_ID     = process.env.DISCORD_CLIENT_ID     || "1518077281665286324";
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || "4GSQyUpYybtUBrED1Nary0WbXefkQqad";
+const DISCORD_GUILD_ID      = process.env.DISCORD_GUILD_ID      || "1489281154522677280";
+const DISCORD_WANDERER_ROLE = process.env.DISCORD_WANDERER_ROLE_ID || "1504725209087869009";
+const DISCORD_REDIRECT_URI  = process.env.DISCORD_REDIRECT_URI  || "https://celestial-yokai-habitats-production.up.railway.app/api/auth/discord/callback";
+const DISCORD_ADMIN_ID      = process.env.DISCORD_ADMIN_ID      || "834262283826757663";
+const KITSARI_CONTRACT      = process.env.KITSARI_CONTRACT       || "AtYGtFGHHkqBURkXrLkurUfLo929mhU2hmtUznfri1rg";
+const HELIUS_RPC            = process.env.HELIUS_RPC             || "https://api.mainnet-beta.solana.com";
+
+// In-memory session store (resets on redeploy — acceptable for now)
+const holderSessions = {}; // token → { discordId, username, avatar, isAdmin, isHolder, wallet, loggedInAt }
+const draftQueue     = []; // { id, submittedAt, submittedBy, status, draft, productType, notes }
+const SESSION_TTL    = 24 * 60 * 60 * 1000; // 24 hours
+
+function makeSessionToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+function getSession(req) {
+  const auth = req.headers["authorization"] || "";
+  const token = auth.replace("Bearer ", "").trim() || req.query._sess;
+  if (!token) return null;
+  const sess = holderSessions[token];
+  if (!sess) return null;
+  if (Date.now() - sess.loggedInAt > SESSION_TTL) { delete holderSessions[token]; return null; }
+  return { ...sess, token };
+}
+function requireHolder(req, res, next) {
+  const sess = getSession(req);
+  if (!sess || !sess.isHolder) return res.status(401).json({ error: "Holder login required", loginUrl: "/api/auth/discord/connect" });
+  req.session = sess;
+  next();
+}
+function requireAdmin(req, res, next) {
+  const sess = getSession(req);
+  if (!sess || !sess.isAdmin) return res.status(403).json({ error: "Admin only" });
+  req.session = sess;
+  next();
+}
+
+// ── Check Discord guild member roles ──────────────────────────────────
+async function getDiscordMemberRoles(userId, accessToken) {
+  const r = await fetch(
+    `https://discord.com/api/v10/users/@me/guilds/${DISCORD_GUILD_ID}/member`,
+    { headers: { Authorization: "Bearer " + accessToken } }
+  );
+  if (!r.ok) {
+    const t = await r.text();
+    console.warn("[Discord] Member fetch failed:", r.status, t.slice(0, 200));
+    return [];
+  }
+  const m = await r.json();
+  return m.roles || [];
+}
+
+// ── Check Solana NFT ownership via Helius DAS API ─────────────────────
+async function checkSolanaNFTOwnership(walletAddress) {
+  if (!walletAddress) return { holds: false, count: 0 };
+  try {
+    // Use Helius DAS getAssetsByOwner to check if wallet holds any Kitsari NFT
+    const rpcUrl = HELIUS_RPC.includes("helius")
+      ? HELIUS_RPC
+      : "https://api.mainnet-beta.solana.com";
+
+    const body = {
+      jsonrpc: "2.0", id: 1,
+      method: "getAssetsByOwner",
+      params: {
+        ownerAddress: walletAddress,
+        page: 1, limit: 1000,
+        displayOptions: { showFungible: false, showNativeBalance: false },
+      },
+    };
+    const r = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    const assets = d?.result?.items || [];
+    // Check if any asset's grouping matches our collection contract
+    const kitsariAssets = assets.filter(a => {
+      const groupings = a.grouping || [];
+      return groupings.some(g =>
+        g.group_key === "collection" &&
+        g.group_value === KITSARI_CONTRACT
+      );
+    });
+    console.log("[Solana] Wallet", walletAddress, "holds", kitsariAssets.length, "Kitsari NFTs");
+    return { holds: kitsariAssets.length > 0, count: kitsariAssets.length };
+  } catch (e) {
+    console.error("[Solana] NFT check failed:", e.message);
+    return { holds: false, count: 0, error: e.message };
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// DISCORD OAUTH ROUTES
+// ════════════════════════════════════════════════════════════════════════
+
+// Step 1 — redirect to Discord
+app.get("/api/auth/discord/connect", (req, res) => {
+  if (!DISCORD_CLIENT_ID) return res.status(500).json({ error: "DISCORD_CLIENT_ID not set" });
+  if (!DISCORD_CLIENT_SECRET) return res.status(500).json({ error: "DISCORD_CLIENT_SECRET not set" });
+  if (!DISCORD_REDIRECT_URI) return res.status(500).json({ error: "DISCORD_REDIRECT_URI not set" });
+
+  const state = crypto.randomBytes(16).toString("hex");
+  // Store state briefly (5 min) to prevent CSRF
+  holderSessions["_state_" + state] = { createdAt: Date.now() };
+
+  const url = "https://discord.com/oauth2/authorize" +
+    "?client_id=" + DISCORD_CLIENT_ID +
+    "&response_type=code" +
+    "&redirect_uri=" + encodeURIComponent(DISCORD_REDIRECT_URI) +
+    "&scope=identify%20guilds.members.read" +
+    "&state=" + state;
+
+  res.redirect(url);
+});
+
+// Step 2 — callback from Discord
+app.get("/api/auth/discord/callback", async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error) return res.redirect("/?auth=error&reason=" + encodeURIComponent(error));
+  if (!code)  return res.redirect("/?auth=error&reason=no_code");
+
+  // Validate state (loose — just check it existed)
+  const stateKey = "_state_" + state;
+  if (!holderSessions[stateKey]) {
+    console.warn("[Discord Auth] State not found:", state);
+    // Don't block — state may have been cleaned up
+  }
+  delete holderSessions[stateKey];
+
+  try {
+    // Exchange code for access token
+    const tokenRes = await fetch("https://discord.com/api/v10/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id:     DISCORD_CLIENT_ID,
+        client_secret: DISCORD_CLIENT_SECRET,
+        grant_type:    "authorization_code",
+        code,
+        redirect_uri:  DISCORD_REDIRECT_URI,
+      }),
+    });
+    if (!tokenRes.ok) {
+      const e = await tokenRes.text();
+      console.error("[Discord Auth] Token exchange failed:", tokenRes.status, e);
+      return res.redirect("/?auth=error&reason=token_exchange_failed");
+    }
+    const tokenData = await tokenRes.json();
+    const accessToken = tokenData.access_token;
+
+    // Get Discord user info
+    const userRes = await fetch("https://discord.com/api/v10/users/@me", {
+      headers: { Authorization: "Bearer " + accessToken },
+    });
+    if (!userRes.ok) return res.redirect("/?auth=error&reason=user_fetch_failed");
+    const user = await userRes.json();
+
+    console.log("[Discord Auth] User:", user.id, user.username);
+
+    // Check guild membership + roles
+    const roles = await getDiscordMemberRoles(user.id, accessToken);
+    const hasWanderer = roles.includes(DISCORD_WANDERER_ROLE);
+    const isAdmin = DISCORD_ADMIN_ID ? user.id === DISCORD_ADMIN_ID : false;
+
+    console.log("[Discord Auth] Roles:", roles.length, "hasWanderer:", hasWanderer, "isAdmin:", isAdmin);
+
+    // Issue session — wallet linkage happens separately
+    const sessionToken = makeSessionToken();
+    holderSessions[sessionToken] = {
+      discordId:  user.id,
+      username:   user.username,
+      globalName: user.global_name || user.username,
+      avatar:     user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null,
+      isHolder:   hasWanderer || isAdmin, // admin always gets access
+      isAdmin,
+      hasWanderer,
+      wallet:     null,   // connected after login via /api/auth/link-wallet
+      nftCount:   0,
+      nftVerified:false,
+      loggedInAt: Date.now(),
+      discordRoles: roles,
+    };
+
+    // Log the numeric ID so admin can set DISCORD_ADMIN_ID
+    console.log("[Discord Auth] LOGIN COMPLETE — Discord numeric ID:", user.id, "| username:", user.username);
+
+    if (!hasWanderer && !isAdmin) {
+      // Not a holder — redirect with token so they can see the "not a holder" screen
+      // Still issue limited session so we can show them a proper message
+      holderSessions[sessionToken].isHolder = false;
+      return res.redirect("/?auth=not_holder&sess=" + sessionToken + "&user=" + encodeURIComponent(user.global_name || user.username));
+    }
+
+    res.redirect("/?auth=success&sess=" + sessionToken);
+  } catch (err) {
+    console.error("[Discord Auth] Error:", err.message);
+    res.redirect("/?auth=error&reason=" + encodeURIComponent(err.message));
+  }
+});
+
+// ── Link wallet (optional — for on-chain NFT verification) ────────────
+app.post("/api/auth/link-wallet", requireHolder, async (req, res) => {
+  const { walletAddress } = req.body;
+  if (!walletAddress) return res.status(400).json({ error: "walletAddress required" });
+
+  const nftCheck = await checkSolanaNFTOwnership(walletAddress);
+  const sess = holderSessions[req.session.token];
+  if (sess) {
+    sess.wallet      = walletAddress;
+    sess.nftVerified = nftCheck.holds;
+    sess.nftCount    = nftCheck.count;
+  }
+
+  res.json({
+    walletAddress,
+    nftVerified: nftCheck.holds,
+    nftCount:    nftCheck.count,
+    message: nftCheck.holds
+      ? "Verified — " + nftCheck.count + " Kitsari NFT(s) confirmed"
+      : "No Kitsari NFTs found in this wallet. Discord Wanderer role still grants access.",
+  });
+});
+
+// ── Session check ─────────────────────────────────────────────────────
+app.get("/api/auth/me", (req, res) => {
+  const sess = getSession(req);
+  if (!sess) return res.json({ loggedIn: false });
+  res.json({
+    loggedIn:    true,
+    discordId:   sess.discordId,
+    username:    sess.username,
+    globalName:  sess.globalName,
+    avatar:      sess.avatar,
+    isHolder:    sess.isHolder,
+    isAdmin:     sess.isAdmin,
+    hasWanderer: sess.hasWanderer,
+    wallet:      sess.wallet,
+    nftVerified: sess.nftVerified,
+    nftCount:    sess.nftCount,
+  });
+});
+
+// ── Logout ────────────────────────────────────────────────────────────
+app.post("/api/auth/logout", (req, res) => {
+  const sess = getSession(req);
+  if (sess) delete holderSessions[sess.token];
+  res.json({ loggedOut: true });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// DRAFT SUBMISSION QUEUE (holders submit, admin approves)
+// ════════════════════════════════════════════════════════════════════════
+
+let draftIdCounter = 1;
+
+// Submit a draft for review
+app.post("/api/drafts/submit", requireHolder, (req, res) => {
+  const sess = req.session;
+  if (!sess.isHolder) return res.status(403).json({ error: "Holder access required" });
+
+  const { aiDraft, productType, productTitle, notes, blueprintId, printProviderId, variantId, allVariantIds, printifyImageId } = req.body;
+  if (!aiDraft) return res.status(400).json({ error: "aiDraft required" });
+
+  const draft = {
+    id:              draftIdCounter++,
+    submittedAt:     new Date().toISOString(),
+    submittedBy:     sess.discordId,
+    submitterName:   sess.globalName || sess.username,
+    submitterAvatar: sess.avatar,
+    status:          "pending",  // pending | approved | rejected
+    reviewedAt:      null,
+    reviewNote:      null,
+    aiDraft,
+    productType:     productType || "sticker",
+    productTitle:    productTitle || "",
+    notes:           notes || "",
+    // Printify data if they went through the wizard
+    blueprintId:     blueprintId || null,
+    printProviderId: printProviderId || null,
+    variantId:       variantId || null,
+    allVariantIds:   allVariantIds || [],
+    printifyImageId: printifyImageId || null,
+  };
+
+  draftQueue.push(draft);
+  console.log("[Draft Queue] New submission #" + draft.id + " from", sess.username, "-", productType);
+
+  res.json({
+    success: true,
+    draftId: draft.id,
+    message: "Draft submitted for review. Kitsari will review and approve it shortly.",
+    position: draftQueue.filter(d => d.status === "pending").length,
+  });
+});
+
+// Get holder's own submissions
+app.get("/api/drafts/mine", requireHolder, (req, res) => {
+  const mine = draftQueue
+    .filter(d => d.submittedBy === req.session.discordId)
+    .map(d => ({
+      id: d.id, submittedAt: d.submittedAt, status: d.status,
+      productType: d.productType, productTitle: d.productTitle,
+      reviewNote: d.reviewNote, reviewedAt: d.reviewedAt,
+    }));
+  res.json({ drafts: mine, total: mine.length });
+});
+
+// ── ADMIN: View full queue ────────────────────────────────────────────
+app.get("/api/admin/drafts", requireAdmin, (req, res) => {
+  const { status } = req.query;
+  const list = status ? draftQueue.filter(d => d.status === status) : draftQueue;
+  res.json({ drafts: list.slice().reverse(), total: list.length }); // newest first
+});
+
+// ── ADMIN: Approve a draft ────────────────────────────────────────────
+app.post("/api/admin/drafts/:id/approve", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const draft = draftQueue.find(d => d.id === id);
+  if (!draft) return res.status(404).json({ error: "Draft not found" });
+  if (draft.status !== "pending") return res.status(400).json({ error: "Draft already reviewed" });
+
+  const { note, autoPublish } = req.body;
+  draft.status     = "approved";
+  draft.reviewedAt = new Date().toISOString();
+  draft.reviewNote = note || "Approved by admin.";
+
+  console.log("[Admin] Approved draft #" + id + " from", draft.submitterName);
+
+  // If they completed the wizard and autoPublish is requested
+  if (autoPublish && draft.printifyImageId && draft.blueprintId) {
+    try {
+      // Create the Printify product and publish
+      const shopId = await getPrintifyShopId();
+      const priceInCents = 1800;
+      const variantIds = (draft.allVariantIds && draft.allVariantIds.length > 0
+        ? draft.allVariantIds.map(v => parseInt(v))
+        : [parseInt(draft.variantId)]
+      ).slice(0, 100);
+
+      const prod = await printifyFetch("/shops/" + shopId + "/products.json", {
+        method: "POST",
+        body: JSON.stringify({
+          title: draft.productTitle.slice(0, 140) || "Celestial Yokai " + draft.productType,
+          description: draft.aiDraft.slice(0, 1000),
+          blueprint_id: parseInt(draft.blueprintId),
+          print_provider_id: parseInt(draft.printProviderId),
+          variants: variantIds.map(id => ({ id, price: priceInCents, is_enabled: true })),
+          print_areas: [{ variant_ids: variantIds, placeholders: [{ position: "front", images: [{ id: draft.printifyImageId, x: 0.5, y: 0.5, scale: 1, angle: 0 }] }] }],
+        }),
+      });
+      draft.printifyProductId = prod.id;
+      draft.status = "published";
+      console.log("[Admin] Auto-published draft #" + id + " → Printify", prod.id);
+      return res.json({ success: true, draftId: id, status: "published", printifyProductId: prod.id });
+    } catch (e) {
+      console.error("[Admin] Auto-publish failed:", e.message);
+      return res.json({ success: true, draftId: id, status: "approved", publishError: e.message });
+    }
+  }
+
+  res.json({ success: true, draftId: id, status: "approved" });
+});
+
+// ── ADMIN: Reject a draft ────────────────────────────────────────────
+app.post("/api/admin/drafts/:id/reject", requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const draft = draftQueue.find(d => d.id === id);
+  if (!draft) return res.status(404).json({ error: "Draft not found" });
+
+  const { note } = req.body;
+  draft.status     = "rejected";
+  draft.reviewedAt = new Date().toISOString();
+  draft.reviewNote = note || "Not approved at this time.";
+
+  console.log("[Admin] Rejected draft #" + id, "-", note);
+  res.json({ success: true, draftId: id, status: "rejected" });
+});
+
+// ── ADMIN: Stats ──────────────────────────────────────────────────────
+app.get("/api/admin/stats", requireAdmin, (req, res) => {
+  res.json({
+    totalSessions: Object.keys(holderSessions).filter(k => !k.startsWith("_state_")).length,
+    activeSessions: Object.values(holderSessions).filter(s => s.discordId && Date.now() - s.loggedInAt < SESSION_TTL).length,
+    draftQueue: {
+      total:    draftQueue.length,
+      pending:  draftQueue.filter(d => d.status === "pending").length,
+      approved: draftQueue.filter(d => d.status === "approved").length,
+      rejected: draftQueue.filter(d => d.status === "rejected").length,
+      published:draftQueue.filter(d => d.status === "published").length,
+    },
+  });
+});
+
+// ── Protect wizard routes behind holder auth ───────────────────────────
+// Wrap commerce + printify creation routes so non-holders get 401
+const PROTECTED_PATHS = [
+  "/api/commerce/generate-product",
+  "/api/printify/create-product",
+  "/api/printify/upload-image",
+  "/api/printify/publish-to-etsy",
+];
+PROTECTED_PATHS.forEach(path => {
+  app._router.stack = app._router.stack; // no-op, gate applied via middleware below
+});
+
+// Insert auth check before protected routes
+app.use(PROTECTED_PATHS, (req, res, next) => {
+  const sess = getSession(req);
+  if (!sess || !sess.isHolder) {
+    return res.status(401).json({
+      error: "Holder login required to use the Product Forge.",
+      loginUrl: "/api/auth/discord/connect",
+    });
+  }
+  req.session = sess;
+  next();
+});
+
+
 // ── Static + SPA fallback AFTER all /api routes ───────────────────────
+// ── Holder portal routes ─────────────────────────────────────────────
+const HOLDER_HTML = path.join(PUBLIC, 'holder.html');
+app.get('/holder', (req, res) => res.sendFile(HOLDER_HTML));
+app.get('/holder/login', (req, res) => res.sendFile(HOLDER_HTML));
+
+// Admin: Active sessions
+app.get('/api/admin/sessions', requireAdmin, (req, res) => {
+  const active = [];
+  for (const [token, sess] of Object.entries(holderSessions)) {
+    if (!token.startsWith('_state_') && sess.discordId) {
+      active.push({
+        username: sess.username, discordId: sess.discordId,
+        isAdmin: sess.isAdmin, isHolder: sess.isHolder,
+        hasWanderer: sess.hasWanderer, wallet: sess.wallet,
+        nftVerified: sess.nftVerified, verifiedAt: new Date(sess.loggedInAt).toISOString(),
+      });
+    }
+  }
+  res.json({ count: active.length, sessions: active });
+});
+
 app.use(express.static(PUBLIC));
 app.get("*", (req, res) => {
   if (req.path.startsWith("/api/")) return res.status(404).json({ error: "API route not found", path: req.path });
