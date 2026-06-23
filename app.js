@@ -1117,10 +1117,185 @@ app.get('/api/admin/sessions', requireAdmin, (req, res) => {
   res.json({ count: active.length, sessions: active });
 });
 
+// ════════════════════════════════════════════════════════════════════════
+// BULLETIN BOARD — public feed of approved/pending holder submissions
+// ════════════════════════════════════════════════════════════════════════
+app.get("/api/bulletin", (req, res) => {
+  const public_items = draftQueue
+    .filter(d => d.status === "pending" || d.status === "approved")
+    .slice(-30).reverse()
+    .map(d => ({
+      id:          d.id,
+      submitterName: d.submitterName || "Anonymous Yokai",
+      productType: d.productType,
+      concept:     d.concept || "",
+      status:      d.status,
+      submittedAt: d.submittedAt,
+      reviewNote:  d.status === "approved" ? d.reviewNote : null,
+    }));
+  res.json({ items: public_items, total: draftQueue.length });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// KITSARI AI CHAT — holder feature
+// Supports: general chat, x posts, product drafts, design ideas, lore
+// ════════════════════════════════════════════════════════════════════════
+const KITSARI_PERSONA = `You are Kitsari — the celestial fox spirit and guardian of the Lantern District Market.
+You speak with warmth, mystical wisdom, and sharp wit. You help Celestial Yokai NFT holders with:
+- Project lore and ecosystem worldbuilding
+- Product ideas and design concepts for merchandise
+- Social media posts (especially X/Twitter) with Celestial Yokai energy
+- Meme ideas and community content
+- General questions about the collection
+
+Style: mystical but direct. No em dashes. Use occasional celestial metaphors.
+The Celestial Yokai collection lives on Solana. Holders are called Wanderers.
+The Lantern District is the marketplace hub of the Celestial Yokai universe.
+Always end responses with: ✦ Kitsari — Lantern District`;
+
+async function kitsariChat(messages, max = 1200) {
+  const result = await anthropic.messages.create({
+    model: "claude-sonnet-4-5",
+    max_tokens: max,
+    system: KITSARI_PERSONA,
+    messages,
+  });
+  return result.content.filter(b => b.type === "text").map(b => b.text).join("\n");
+}
+
+app.post("/api/holder/chat", requireHolder, async (req, res) => {
+  req.setTimeout(90000);
+  const { message, history = [], mode = "chat" } = req.body;
+  if (!message?.trim()) return res.status(400).json({ error: "Message required" });
+
+  const systemAddons = {
+    xpost:   "\nFocus: Generate X (Twitter) posts. Make them punchy, mystical, community-focused. Include relevant hashtags like #CelestialYokai #Solana #NFT.",
+    product: "\nFocus: Help generate product ideas and drafts for Kitsari merchandise. Be specific about design direction, target buyer, and Etsy SEO.",
+    design:  "\nFocus: Help with visual design concepts, color palettes, and art direction for Celestial Yokai products.",
+    lore:    "\nFocus: Help build and expand the Celestial Yokai lore, worldbuilding, character backstories, and ecosystem narrative.",
+    meme:    "\nFocus: Generate meme concepts for Celestial Yokai content. Describe the meme format, text overlay, and vibe clearly.",
+  };
+
+  const messages = [
+    ...history.slice(-10).map(h => ({ role: h.role, content: h.content })),
+    { role: "user", content: message + (systemAddons[mode] || "") },
+  ];
+
+  try {
+    const reply = await kitsariChat(messages);
+    res.json({ reply, mode });
+  } catch (e) {
+    res.status(500).json({ error: "Kitsari is unavailable: " + e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// MEME GENERATOR — generates 4 meme concepts for uploaded Kitsari NFT
+// Uses Claude vision to analyze the NFT then generate meme directions
+// ════════════════════════════════════════════════════════════════════════
+app.post("/api/holder/generate-memes", requireHolder, async (req, res) => {
+  req.setTimeout(120000);
+  const { imageBase64, mimeType = "image/png", nftName = "Kitsari NFT" } = req.body;
+  if (!imageBase64) return res.status(400).json({ error: "imageBase64 required" });
+
+  try {
+    // Step 1: Analyze the NFT with Claude vision
+    const analysis = await anthropic.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 800,
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mimeType, data: imageBase64 },
+          },
+          {
+            type: "text",
+            text: `Analyze this Kitsari NFT image carefully. Describe:
+1. The fox character's expression and pose
+2. Key visual traits (colors, accessories, outfit, background)
+3. The overall vibe/mood (fierce, mysterious, playful, regal, etc.)
+4. Any notable details that make this NFT unique
+
+Be specific and concise. This analysis will be used to generate memes.`,
+          },
+        ],
+      }],
+    });
+    const nftAnalysis = analysis.content[0].text;
+
+    // Step 2: Generate 4 distinct meme concepts
+    const memePrompt = await anthropic.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1600,
+      system: `You are a meme strategist for the Celestial Yokai NFT community. 
+Generate meme concepts that CELEBRATE and ENHANCE the NFT — never distort, mock, or alter the character's appearance.
+Each meme should overlay text or context AROUND the NFT image, not ON the character itself.
+Keep the Kitsari character as the hero of each meme.`,
+      messages: [{
+        role: "user",
+        content: `NFT: ${nftName}
+Analysis: ${nftAnalysis}
+
+Generate exactly 4 DIFFERENT meme concepts for this Kitsari NFT.
+Each must use a different meme format and different emotion/vibe.
+
+For EACH meme, output in this exact format:
+---MEME [N]---
+FORMAT: [meme template name, e.g. "Drake meme", "Distracted boyfriend", "This is fine", "Change my mind", custom]
+VIBE: [one word: hype / mysterious / relatable / flex / funny / legendary]
+TOP TEXT: [text that goes above or before the NFT image — keep it short]
+BOTTOM TEXT: [text that goes below or after the image — the punchline]
+CAPTION: [social post caption with hashtags]
+WHY IT WORKS: [one sentence on why this lands for the Celestial Yokai community]
+---END---
+
+Make each meme distinct. Reference specific traits from the NFT analysis.`,
+      }],
+    });
+
+    const rawMemes = memePrompt.content[0].text;
+
+    // Parse the 4 memes
+    const memes = [];
+    const memeBlocks = rawMemes.split(/---MEME \d+---/).filter(b => b.trim());
+    for (const block of memeBlocks) {
+      const get = (key) => {
+        const m = block.match(new RegExp(key + ":\\s*(.+)"));
+        return m ? m[1].trim() : "";
+      };
+      memes.push({
+        format:   get("FORMAT"),
+        vibe:     get("VIBE"),
+        topText:  get("TOP TEXT"),
+        botText:  get("BOTTOM TEXT"),
+        caption:  get("CAPTION"),
+        why:      get("WHY IT WORKS"),
+      });
+    }
+
+    res.json({
+      success: true,
+      nftAnalysis,
+      memes: memes.slice(0, 4),
+      note: "Images are your original NFT — overlay the text above/below to create each meme.",
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Meme generation failed: " + e.message });
+  }
+});
+
+// ── Page routes ───────────────────────────────────
+const HOME_HTML    = path.join(PUBLIC, 'home.html');
+const CONSOLE_HTML = path.join(PUBLIC, 'index.html');
+app.get("/home",    (req, res) => res.sendFile(HOME_HTML));
+app.get("/console", (req, res) => res.sendFile(CONSOLE_HTML));
+
 app.use(express.static(PUBLIC));
 app.get("*", (req, res) => {
   if (req.path.startsWith("/api/")) return res.status(404).json({ error: "API route not found", path: req.path });
-  res.sendFile(INDEX);
+  res.sendFile(HOME_HTML); // home is now the landing page
 });
 
 app.listen(PORT, () => {
