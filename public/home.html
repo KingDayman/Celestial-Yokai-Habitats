@@ -7,15 +7,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet"/>
 <style>
 :root{
-  --bg:#02000d;--surface:rgba(255,255,255,0.03);--surface2:rgba(255,255,255,0.06);
-  --border:rgba(155,92,246,0.18);--borderdim:rgba(255,255,255,0.07);
-  --text:rgba(255,255,255,0.88);--dim:rgba(255,255,255,0.38);
+  --bg:#02000d;--surface:rgba(155,92,246,0.04);--surface2:rgba(155,92,246,0.07);
+  --border:rgba(155,92,246,0.22);--borderdim:rgba(155,92,246,0.1);
+  --text:rgba(255,248,240,0.92);--dim:rgba(200,185,220,0.62);--textmid:rgba(220,205,235,0.78);
   --gold:#e8c97a;--purple:#c084fc;--teal:#67e8f9;--green:#4ade80;--red:#ff6b6b;
   --fm:'Share Tech Mono',monospace;--r:8px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{background:var(--bg);color:var(--text);font-family:var(--fm);font-size:13px;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--fm);font-size:14px;line-height:1.5;overflow-x:hidden}
 canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
 
 /* ── LAYOUT ── */
@@ -59,7 +59,7 @@ main{flex:1}
   background:linear-gradient(135deg,#fff 0%,rgba(192,132,252,0.9) 50%,#e8c97a 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
   margin-bottom:.6rem}
-.hero-sub{font-size:.65rem;color:var(--dim);line-height:1.7;max-width:440px;margin:0 auto 1.8rem;letter-spacing:.04em}
+.hero-sub{font-size:.65rem;color:var(--textmid);line-height:1.75;max-width:440px;margin:0 auto 1.8rem;letter-spacing:.04em}
 .hero-cta{display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap}
 .btn-hero-primary{display:inline-flex;align-items:center;gap:.55rem;padding:.75rem 1.5rem;
   border-radius:var(--r);border:1px solid rgba(88,101,242,.5);
@@ -72,7 +72,7 @@ main{flex:1}
   color:var(--gold);font-family:var(--fm);font-size:.58rem;letter-spacing:.14em;
   cursor:pointer;text-decoration:none;background:rgba(232,201,122,.05);transition:all .25s}
 .btn-hero-secondary:hover{background:rgba(232,201,122,.1);border-color:rgba(232,201,122,.6)}
-.hero-note{font-size:.46rem;color:var(--dim);margin-top:.9rem;opacity:.7}
+.hero-note{font-size:.52rem;color:var(--dim);margin-top:.9rem}
 
 /* ── HERO AVATAR ── */
 .hero-avatar{width:100px;height:100px;border-radius:50%;margin:0 auto 1.5rem;
@@ -96,7 +96,7 @@ main{flex:1}
 .feat-card.locked:hover{transform:none;box-shadow:none}
 .feat-icon{font-size:1.4rem;margin-bottom:.5rem;display:block}
 .feat-name{font-size:.52rem;letter-spacing:.12em;color:var(--gold);margin-bottom:.25rem}
-.feat-desc{font-size:.48rem;color:var(--dim);line-height:1.55}
+.feat-desc{font-size:.48rem;color:var(--textmid);line-height:1.65}
 .feat-tag{display:inline-block;font-size:.38rem;letter-spacing:.1em;padding:.1rem .35rem;
   border-radius:6px;border:1px solid;margin-top:.4rem}
 .tag-holder{border-color:rgba(155,92,246,.3);color:var(--purple)}
@@ -116,11 +116,11 @@ main{flex:1}
   border:1px solid rgba(155,92,246,.25)}
 .bi-body{flex:1;min-width:0}
 .bi-meta{display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem;flex-wrap:wrap}
-.bi-user{font-size:.48rem;color:var(--text)}
+.bi-user{font-size:.54rem;color:var(--text);font-weight:500}
 .bi-type{font-size:.4rem;letter-spacing:.1em;padding:.08rem .3rem;border-radius:6px;
   border:1px solid rgba(155,92,246,.25);color:var(--purple)}
 .bi-time{font-size:.4rem;color:var(--dim);margin-left:auto}
-.bi-concept{font-size:.5rem;color:var(--dim);line-height:1.5;
+.bi-concept{font-size:.5rem;color:var(--textmid);line-height:1.6;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bi-status{font-size:.38rem;letter-spacing:.1em;padding:.08rem .3rem;border-radius:6px;border:1px solid}
 .bi-status.pending{border-color:rgba(232,201,122,.3);color:var(--gold)}
