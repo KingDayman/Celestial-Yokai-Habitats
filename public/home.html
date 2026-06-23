@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<title>Celestial Yokai — Lantern District Market</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#02000d;--surface:rgba(255,255,255,0.03);--surface2:rgba(255,255,255,0.06);
+  --border:rgba(155,92,246,0.18);--borderdim:rgba(255,255,255,0.07);
+  --text:rgba(255,255,255,0.88);--dim:rgba(255,255,255,0.38);
+  --gold:#e8c97a;--purple:#c084fc;--teal:#67e8f9;--green:#4ade80;--red:#ff6b6b;
+  --fm:'Share Tech Mono',monospace;--r:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--fm);font-size:13px;overflow-x:hidden}
+canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+/* ── LAYOUT ── */
+#wrap{position:relative;z-index:10;min-height:100vh;display:flex;flex-direction:column}
+nav{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.2rem;
+  border-bottom:1px solid var(--borderdim);background:rgba(2,0,13,0.85);
+  backdrop-filter:blur(12px);position:sticky;top:0;z-index:100}
+.nav-logo{font-family:'Cinzel',serif;font-size:.85rem;letter-spacing:.12em;color:#fff;
+  text-decoration:none;display:flex;align-items:center;gap:.5rem}
+.nav-logo img{width:28px;height:28px;border-radius:50%;border:1px solid rgba(155,92,246,.4)}
+.nav-links{display:flex;align-items:center;gap:.6rem}
+.nav-btn{font-family:var(--fm);font-size:.48rem;letter-spacing:.12em;padding:.3rem .7rem;
+  border-radius:var(--r);border:1px solid var(--borderdim);color:var(--dim);
+  background:transparent;cursor:pointer;text-decoration:none;transition:all .2s}
+.nav-btn:hover,.nav-btn.active{border-color:rgba(155,92,246,.4);color:var(--purple)}
+.nav-btn.discord{border-color:rgba(88,101,242,.4);color:#7289da;background:rgba(88,101,242,.08)}
+.nav-btn.discord:hover{background:rgba(88,101,242,.18)}
+.nav-btn.gold{border-color:rgba(232,201,122,.35);color:var(--gold);background:rgba(232,201,122,.06)}
+.nav-user{display:flex;align-items:center;gap:.5rem}
+.nav-avi{width:26px;height:26px;border-radius:50%;border:1px solid rgba(155,92,246,.4);overflow:hidden;
+  background:#1a0d30;display:flex;align-items:center;justify-content:center;font-size:.7rem}
+.nav-avi img{width:100%;height:100%;object-fit:cover}
+.nav-username{font-size:.5rem;color:var(--text)}
+.nav-badge{font-size:.4rem;letter-spacing:.1em;padding:.1rem .35rem;border-radius:8px;border:1px solid}
+.nb-admin{border-color:rgba(232,201,122,.4);color:var(--gold)}
+.nb-holder{border-color:rgba(155,92,246,.3);color:var(--purple)}
+
+main{flex:1}
+
+/* ── HERO ── */
+.hero{text-align:center;padding:3.5rem 1.2rem 3rem;max-width:680px;margin:0 auto}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:.5rem;
+  background:rgba(155,92,246,.08);border:1px solid rgba(155,92,246,.22);
+  border-radius:20px;padding:.28rem .9rem;font-size:.5rem;letter-spacing:.2em;
+  color:rgba(155,92,246,.8);margin-bottom:1.2rem}
+.hero-dot{width:5px;height:5px;border-radius:50%;background:#4ade80;
+  box-shadow:0 0 6px #4ade80;animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.hero-title{font-family:'Cinzel',serif;font-size:clamp(1.8rem,7vw,3.2rem);
+  font-weight:700;letter-spacing:.06em;line-height:1.1;
+  background:linear-gradient(135deg,#fff 0%,rgba(192,132,252,0.9) 50%,#e8c97a 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  margin-bottom:.6rem}
+.hero-sub{font-size:.65rem;color:var(--dim);line-height:1.7;max-width:440px;margin:0 auto 1.8rem;letter-spacing:.04em}
+.hero-cta{display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap}
+.btn-hero-primary{display:inline-flex;align-items:center;gap:.55rem;padding:.75rem 1.5rem;
+  border-radius:var(--r);border:1px solid rgba(88,101,242,.5);
+  background:rgba(88,101,242,.14);color:#7289da;font-family:var(--fm);
+  font-size:.58rem;letter-spacing:.14em;cursor:pointer;text-decoration:none;transition:all .25s}
+.btn-hero-primary:hover{background:rgba(88,101,242,.26);border-color:rgba(88,101,242,.8);
+  box-shadow:0 0 24px rgba(88,101,242,.2)}
+.btn-hero-secondary{display:inline-flex;align-items:center;gap:.4rem;padding:.75rem 1.3rem;
+  border-radius:var(--r);border:1px solid rgba(232,201,122,.3);
+  color:var(--gold);font-family:var(--fm);font-size:.58rem;letter-spacing:.14em;
+  cursor:pointer;text-decoration:none;background:rgba(232,201,122,.05);transition:all .25s}
+.btn-hero-secondary:hover{background:rgba(232,201,122,.1);border-color:rgba(232,201,122,.6)}
+.hero-note{font-size:.46rem;color:var(--dim);margin-top:.9rem;opacity:.7}
+
+/* ── HERO AVATAR ── */
+.hero-avatar{width:100px;height:100px;border-radius:50%;margin:0 auto 1.5rem;
+  border:2px solid rgba(155,92,246,.4);overflow:hidden;background:#0d0525;
+  box-shadow:0 0 40px rgba(155,92,246,.25),0 0 80px rgba(155,92,246,.1)}
+.hero-avatar img{width:100%;height:100%;object-fit:cover}
+
+/* ── FEATURES GRID ── */
+.features{padding:0 1.2rem 3rem;max-width:780px;margin:0 auto}
+.section-label{font-size:.5rem;letter-spacing:.22em;color:var(--dim);margin-bottom:1rem;
+  display:flex;align-items:center;gap:.5rem}
+.section-label::before{content:'';flex:1;height:1px;background:var(--borderdim)}
+.section-label::after{content:'';flex:1;height:1px;background:var(--borderdim)}
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem}
+@media(min-width:520px){.feat-grid{grid-template-columns:repeat(3,1fr)}}
+.feat-card{background:var(--surface);border:1px solid var(--borderdim);border-radius:var(--r);
+  padding:1rem .85rem;cursor:pointer;transition:all .25s;text-decoration:none;display:block}
+.feat-card:hover{border-color:rgba(155,92,246,.35);background:var(--surface2);
+  transform:translateY(-2px);box-shadow:0 8px 24px rgba(155,92,246,.08)}
+.feat-card.locked{opacity:.45;cursor:default}
+.feat-card.locked:hover{transform:none;box-shadow:none}
+.feat-icon{font-size:1.4rem;margin-bottom:.5rem;display:block}
+.feat-name{font-size:.52rem;letter-spacing:.12em;color:var(--gold);margin-bottom:.25rem}
+.feat-desc{font-size:.48rem;color:var(--dim);line-height:1.55}
+.feat-tag{display:inline-block;font-size:.38rem;letter-spacing:.1em;padding:.1rem .35rem;
+  border-radius:6px;border:1px solid;margin-top:.4rem}
+.tag-holder{border-color:rgba(155,92,246,.3);color:var(--purple)}
+.tag-admin{border-color:rgba(232,201,122,.3);color:var(--gold)}
+.tag-public{border-color:rgba(74,222,128,.3);color:var(--green)}
+
+/* ── BULLETIN BOARD ── */
+.bulletin{padding:0 1.2rem 3rem;max-width:780px;margin:0 auto}
+.bulletin-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}
+.bulletin-title{font-size:.55rem;letter-spacing:.18em;color:var(--gold)}
+.bulletin-count{font-size:.45rem;color:var(--dim)}
+.bulletin-list{display:flex;flex-direction:column;gap:.5rem}
+.bulletin-item{background:var(--surface);border:1px solid var(--borderdim);border-radius:var(--r);
+  padding:.7rem .85rem;display:flex;align-items:flex-start;gap:.65rem}
+.bi-avatar{width:28px;height:28px;border-radius:50%;background:#1a0d30;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:.75rem;
+  border:1px solid rgba(155,92,246,.25)}
+.bi-body{flex:1;min-width:0}
+.bi-meta{display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem;flex-wrap:wrap}
+.bi-user{font-size:.48rem;color:var(--text)}
+.bi-type{font-size:.4rem;letter-spacing:.1em;padding:.08rem .3rem;border-radius:6px;
+  border:1px solid rgba(155,92,246,.25);color:var(--purple)}
+.bi-time{font-size:.4rem;color:var(--dim);margin-left:auto}
+.bi-concept{font-size:.5rem;color:var(--dim);line-height:1.5;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bi-status{font-size:.38rem;letter-spacing:.1em;padding:.08rem .3rem;border-radius:6px;border:1px solid}
+.bi-status.pending{border-color:rgba(232,201,122,.3);color:var(--gold)}
+.bi-status.approved{border-color:rgba(74,222,128,.3);color:var(--green)}
+.bulletin-empty{text-align:center;padding:2rem;color:var(--dim);font-size:.52rem}
+
+/* ── FOOTER ── */
+footer{border-top:1px solid var(--borderdim);padding:1.2rem;text-align:center;
+  font-size:.45rem;color:var(--dim);letter-spacing:.1em}
+footer a{color:rgba(155,92,246,.6);text-decoration:none}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);
+  background:rgba(10,3,25,0.95);border:1px solid rgba(155,92,246,.4);
+  border-radius:var(--r);padding:.6rem 1.2rem;font-size:.52rem;color:var(--text);
+  z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div id="wrap">
+
+  <!-- NAV -->
+  <nav>
+    <a href="/" class="nav-logo">
+      <img src="/kitsari.png" alt="Kitsari" onerror="this.style.display='none'"/>
+      CELESTIAL YOKAI
+    </a>
+    <div class="nav-links" id="nav-links">
+      <a href="/holder" class="nav-btn">HOLDER PORTAL</a>
+      <a href="/console" class="nav-btn gold" id="nav-console" style="display:none">CONSOLE</a>
+      <div class="nav-user" id="nav-user" style="display:none">
+        <div class="nav-avi" id="nav-avi"><span>🦊</span></div>
+        <span class="nav-username" id="nav-username"></span>
+        <span class="nav-badge nb-admin" id="nav-badge-admin" style="display:none">ADMIN</span>
+        <span class="nav-badge nb-holder" id="nav-badge-holder" style="display:none">HOLDER</span>
+        <button class="nav-btn" onclick="logout()" style="font-size:.42rem">LOGOUT</button>
+      </div>
+      <a href="/api/auth/discord/connect" class="nav-btn discord" id="nav-login">LOGIN WITH DISCORD</a>
+    </div>
+  </nav>
+
+  <main>
+    <!-- HERO -->
+    <div class="hero">
+      <div class="hero-avatar">
+        <img src="/kitsari.png" alt="Kitsari" onerror="this.parentElement.innerHTML='🦊'"/>
+      </div>
+      <div class="hero-eyebrow"><span class="hero-dot"></span>LANTERN DISTRICT MARKET — LIVE</div>
+      <h1 class="hero-title">CELESTIAL YOKAI</h1>
+      <p class="hero-sub">The premier commerce platform for Celestial Yokai NFT holders. Generate products, build lore, create memes, and shape the ecosystem — all powered by Kitsari AI.</p>
+      <div class="hero-cta">
+        <a href="/api/auth/discord/connect" class="btn-hero-primary" id="hero-login">
+          <svg width="18" height="14" viewBox="0 0 24 18" fill="currentColor"><path d="M20.317 1.492a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 4.677 1.492a.07.07 0 0 0-.032.027C.533 6.168-.32 10.702.099 15.179c.002.025.02.043.039.053a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
+          LOGIN WITH DISCORD ✦
+        </a>
+        <a href="/holder" class="btn-hero-secondary" id="hero-portal" style="display:none">ENTER HOLDER PORTAL ✦</a>
+        <a href="#features" class="btn-hero-secondary">EXPLORE FEATURES</a>
+      </div>
+      <p class="hero-note">Requires: Celestial Yokai Discord membership + Wanderer role (1 Kitsari NFT on Solana)</p>
+    </div>
+
+    <!-- FEATURES -->
+    <div class="features" id="features">
+      <div class="section-label">FEATURES</div>
+      <div class="feat-grid">
+        <a href="/holder#chat" class="feat-card" onclick="requireLogin(event)">
+          <span class="feat-icon">🦊</span>
+          <div class="feat-name">KITSARI AI</div>
+          <div class="feat-desc">Chat with the Kitsari AI. Build lore, generate X posts, brainstorm products, get design direction.</div>
+          <span class="feat-tag tag-holder">HOLDER</span>
+        </a>
+        <a href="/holder#drafts" class="feat-card" onclick="requireLogin(event)">
+          <span class="feat-icon">📜</span>
+          <div class="feat-name">PRODUCT DRAFTS</div>
+          <div class="feat-desc">Generate AI product drafts and submit for admin approval to be listed on Etsy.</div>
+          <span class="feat-tag tag-holder">HOLDER</span>
+        </a>
+        <a href="/holder#memes" class="feat-card" onclick="requireLogin(event)">
+          <span class="feat-icon">🎭</span>
+          <div class="feat-name">MEME FORGE</div>
+          <div class="feat-desc">Upload your Kitsari NFT and get 4 unique meme concepts generated instantly.</div>
+          <span class="feat-tag tag-holder">HOLDER</span>
+        </a>
+        <a href="#bulletin" class="feat-card">
+          <span class="feat-icon">📋</span>
+          <div class="feat-name">BULLETIN BOARD</div>
+          <div class="feat-desc">See recent holder submissions. Avoid duplicates and get inspired by the community.</div>
+          <span class="feat-tag tag-public">PUBLIC</span>
+        </a>
+        <a href="/console" class="feat-card locked" id="feat-console">
+          <span class="feat-icon">⚙</span>
+          <div class="feat-name">COMMERCE CONSOLE</div>
+          <div class="feat-desc">Full Etsy + Printify pipeline. Publish products directly to the Lantern District Market.</div>
+          <span class="feat-tag tag-admin">ADMIN</span>
+        </a>
+        <a href="/holder#sessions" class="feat-card locked" id="feat-admin">
+          <span class="feat-icon">👁</span>
+          <div class="feat-name">ADMIN QUEUE</div>
+          <div class="feat-desc">Review and approve holder draft submissions. Manage the product pipeline.</div>
+          <span class="feat-tag tag-admin">ADMIN</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- BULLETIN BOARD -->
+    <div class="bulletin" id="bulletin">
+      <div class="bulletin-header">
+        <span class="bulletin-title">✦ COMMUNITY SUBMISSIONS</span>
+        <span class="bulletin-count" id="bulletin-count">loading...</span>
+      </div>
+      <div class="bulletin-list" id="bulletin-list">
+        <div class="bulletin-empty">Loading submissions...</div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div style="margin-bottom:.4rem">
+      CELESTIAL YOKAI ✦ LANTERN DISTRICT MARKET ✦ SOLANA
+    </div>
+    <div>
+      Contract: <a href="https://solscan.io/token/AtYGtFGHHkqBURkXrLkurUfLo929mhU2hmtUznfri1rg" target="_blank">AtYGtFGH...1rg</a>
+      ✦ <a href="https://gravemint.io" target="_blank">GraveMint.io</a>
+    </div>
+  </footer>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══ HOME PAGE ═══════════════════════════════════ */
+
+// Starfield
+(function(){
+  const c=document.getElementById('bg'),ctx=c.getContext('2d');
+  function resize(){c.width=window.innerWidth;c.height=window.innerHeight;}
+  resize(); window.addEventListener('resize',resize);
+  const stars=Array.from({length:150},()=>({
+    x:Math.random()*c.width,y:Math.random()*c.height,
+    r:Math.random()*1.4+.2,a:Math.random(),
+    da:(Math.random()-.5)*.003,
+    col:Math.random()<.1?'rgba(192,132,252,':'rgba(255,255,255,'
+  }));
+  ctx.fillStyle='#02000d';ctx.fillRect(0,0,c.width,c.height);
+  (function f(){
+    ctx.fillStyle='rgba(2,0,13,.08)';ctx.fillRect(0,0,c.width,c.height);
+    stars.forEach(s=>{
+      s.a+=s.da;if(s.a<.05||s.a>1)s.da*=-1;
+      ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle=s.col+s.a+')';ctx.fill();
+    });
+    requestAnimationFrame(f);
+  })();
+})();
+
+let currentUser = null;
+
+function toast(msg, dur=3000){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+function requireLogin(e){
+  if(!currentUser){
+    e.preventDefault();
+    toast('Login with Discord to access holder features ✦');
+    setTimeout(()=>window.location.href='/api/auth/discord/connect',1200);
+  }
+}
+
+async function logout(){
+  await fetch('/api/auth/logout',{method:'POST'});
+  currentUser=null;
+  updateNav(null);
+  toast('Logged out ✦');
+}
+
+function updateNav(user){
+  const navLogin=document.getElementById('nav-login');
+  const navUser=document.getElementById('nav-user');
+  const heroLogin=document.getElementById('hero-login');
+  const heroPortal=document.getElementById('hero-portal');
+  const navConsole=document.getElementById('nav-console');
+  const featConsole=document.getElementById('feat-console');
+  const featAdmin=document.getElementById('feat-admin');
+
+  if(user){
+    if(navLogin)navLogin.style.display='none';
+    if(navUser)navUser.style.display='flex';
+    if(heroLogin)heroLogin.style.display='none';
+    if(heroPortal)heroPortal.style.display='inline-flex';
+
+    const avi=document.getElementById('nav-avi');
+    if(avi){
+      if(user.avatar)avi.innerHTML='<img src="'+user.avatar+'" alt="avatar"/>';
+      else avi.textContent='🦊';
+    }
+    const uname=document.getElementById('nav-username');
+    if(uname)uname.textContent=user.username;
+
+    if(user.isAdmin){
+      const ba=document.getElementById('nav-badge-admin');if(ba)ba.style.display='inline';
+      if(navConsole)navConsole.style.display='inline-flex';
+      if(featConsole)featConsole.classList.remove('locked');
+      if(featAdmin)featAdmin.classList.remove('locked');
+    } else if(user.isHolder){
+      const bh=document.getElementById('nav-badge-holder');if(bh)bh.style.display='inline';
+    }
+  } else {
+    if(navLogin)navLogin.style.display='inline-flex';
+    if(navUser)navUser.style.display='none';
+    if(heroLogin)heroLogin.style.display='inline-flex';
+    if(heroPortal)heroPortal.style.display='none';
+  }
+}
+
+async function checkSession(){
+  try{
+    const r=await fetch('/api/auth/me');
+    const d=await r.json();
+    if(d.loggedIn && (d.isHolder||d.isAdmin)){
+      currentUser=d;
+      updateNav(d);
+    } else {
+      updateNav(null);
+    }
+  }catch(e){ updateNav(null); }
+}
+
+async function loadBulletin(){
+  try{
+    const r=await fetch('/api/bulletin');
+    const d=await r.json();
+    const list=document.getElementById('bulletin-list');
+    const count=document.getElementById('bulletin-count');
+    if(count)count.textContent=d.total+' TOTAL SUBMISSIONS';
+    if(!d.items||!d.items.length){
+      list.innerHTML='<div class="bulletin-empty">No community submissions yet. Be the first to contribute.</div>';
+      return;
+    }
+    list.innerHTML=d.items.map(item=>`
+      <div class="bulletin-item">
+        <div class="bi-avatar">🦊</div>
+        <div class="bi-body">
+          <div class="bi-meta">
+            <span class="bi-user">${item.submitterName}</span>
+            <span class="bi-type">${(item.productType||'?').toUpperCase()}</span>
+            <span class="bi-status ${item.status}">${item.status.toUpperCase()}</span>
+            <span class="bi-time">${new Date(item.submittedAt).toLocaleDateString()}</span>
+          </div>
+          <div class="bi-concept">${item.concept||'No concept provided'}</div>
+        </div>
+      </div>`).join('');
+  }catch(e){
+    const list=document.getElementById('bulletin-list');
+    if(list)list.innerHTML='<div class="bulletin-empty">Could not load submissions.</div>';
+  }
+}
+
+// Init
+checkSession();
+loadBulletin();
+
+// Handle OAuth return
+const params=new URLSearchParams(location.search);
+if(params.get('auth')==='not_holder'){
+  history.replaceState({},'','/');
+  toast('You need the Wanderer role to access holder features. Mint a Kitsari NFT first.',5000);
+}
+</script>
+</body>
+</html>

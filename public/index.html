@@ -233,6 +233,7 @@ canvas#bg-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;po
 
   <!-- HEADER -->
   <div class="site-header">
+    <a href="/" style="display:inline-flex;align-items:center;gap:.3rem;font-size:.48rem;letter-spacing:.12em;color:rgba(255,255,255,.35);text-decoration:none;padding:.25rem .6rem;border-radius:6px;border:1px solid rgba(255,255,255,.08);margin-bottom:.6rem">← HOME</a>
     <div class="site-badge"><span class="site-badge-dot"></span>COMMERCE CONSOLE v2 // LANTERN DISTRICT MARKET // LIVE</div>
     <h1 class="site-title">KITSARI COMMERCE CONSOLE</h1>
     <div class="site-sub">✦ v2 — Etsy + Printify + Claude ✦ &nbsp; Lantern District Market</div>
@@ -856,6 +857,8 @@ async function fetchProviderAndAdvance(){
 
 /* ── STAGE 3: ARTWORK UPLOAD ── */
 async function runUpload(){
+  if(window._uploading){console.log('[Upload] Already in progress, ignoring');return;}
+  window._uploading=true;
   hideEl('stage3-err');
   const urlInput=(document.getElementById('artwork-url')||{}).value||'';
   const fileInput=document.getElementById('artwork-file');
@@ -894,11 +897,14 @@ async function runUpload(){
     disableBtn('upload-btn',false,'RETRY UPLOAD');
   }finally{
     showLoading('upload-loading',false);
+    window._uploading=false;
   }
 }
 
 /* ── STAGE 3 → 4: CREATE PRINTIFY PRODUCT ── */
 async function runStage3(){
+  if(window._creating){console.log('[Create] Already in progress');return;}
+  window._creating=true;
   if(!wizardState.printifyImageId){showErr('stage3-err','Upload artwork first.');return;}
   showLoading('stage4-loading',true,'Creating Printify product with all variants...');
   disableBtn('stage3-btn',true,'CREATING...');
@@ -940,6 +946,7 @@ async function runStage3(){
     disableBtn('stage3-btn',false,'CREATE PRINTIFY DRAFT ✦');
   }finally{
     showLoading('stage4-loading',false);
+    window._creating=false;
   }
 }
 
