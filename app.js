@@ -31,7 +31,7 @@ app.use(express.json({ limit: "20mb" }));
 
 // ── Static files served AFTER all API routes ─────────────────────────────
 const PUBLIC = path.join(__dirname, "public");
-const INDEX  = path.join(PUBLIC, "index.html");
+const INDEX  = path.join(PUBLIC, "console.html");
 
 // ════════════════════════════════════════════════════════════════════════
 // DEBUG ROUTES
@@ -1288,11 +1288,11 @@ Make each meme distinct. Reference specific traits from the NFT analysis.`,
 
 // ── Page routes ───────────────────────────────────
 const HOME_HTML    = path.join(PUBLIC, 'home.html');
-const CONSOLE_HTML = path.join(PUBLIC, 'index.html');
+const CONSOLE_HTML = path.join(PUBLIC, 'console.html');
 app.get("/home",    (req, res) => res.sendFile(HOME_HTML));
 app.get("/console", (req, res) => res.sendFile(CONSOLE_HTML));
 
-app.use(express.static(PUBLIC));
+app.use(express.static(PUBLIC, { index: false })); // disable auto index.html so home.html is the root
 app.get("*", (req, res) => {
   if (req.path.startsWith("/api/")) return res.status(404).json({ error: "API route not found", path: req.path });
   res.sendFile(HOME_HTML); // home is now the landing page
