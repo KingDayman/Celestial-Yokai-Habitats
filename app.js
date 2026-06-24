@@ -10,7 +10,7 @@ try {
   const Database = require("better-sqlite3");
   const DB_PATH  = process.env.DB_PATH || path.join(__dirname, "kitsari.db");
   db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
+  if(db.pragma) db.pragma("journal_mode = WAL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       token        TEXT PRIMARY KEY,
@@ -923,16 +923,30 @@ const DISCORD_ADMIN_ID      = process.env.DISCORD_ADMIN_ID || "83426228382675766
 const KITSARI_CONTRACT      = process.env.KITSARI_CONTRACT       || "AtYGtFGHHkqBURkXrLkurUfLo929mhU2hmtUznfri1rg";
 const HELIUS_RPC            = process.env.HELIUS_RPC             || "https://api.mainnet-beta.solana.com";
 
-// In-memory session store (resets on redeploy — acceptable for now)
-// Sessions now in SQLite — holderSessions kept as alias for compatibility
-const holderSessions = new Proxy({}, {
-  get(t,k){ return dbSessionGet(k); },
-  set(t,k,v){ dbSessionSet(k,v); return true; },
-  deleteProperty(t,k){ dbSessionDel(k); return true; }
-}); // → { discordId, username, avatar, isAdmin, isHolder, wallet, loggedInAt }
-// Draft queue now in SQLite
-const draftQueue = []; // id, submittedAt, submittedBy, status, draft, productType, notes }
-const SESSION_TTL    = 24 * 60 * 60 * 1000; // 24 hours
+// Simple in-memory session store — also persists to SQLite when available
+const holderSessions = {}; // token → session object
+const draftQueue     = []; // legacy compat — drafts go to SQLite
+const SESSION_TTL    = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+// Wrap set/get to also sync SQLite
+function sessSet(token, sess) {
+  holderSessions[token] = sess;
+  try { dbSessionSet(token, sess); } catch(e) {}
+}
+function sessDel(token) {
+  delete holderSessions[token];
+  try { dbSessionDel(token); } catch(e) {}
+}
+function sessGet(token) {
+  // Try memory first
+  if (holderSessions[token]) return { ...holderSessions[token], token };
+  // Fall back to SQLite (e.g. after restart)
+  try {
+    const s = dbSessionGet(token);
+    if (s) { holderSessions[token] = s; return s; }
+  } catch(e) {}
+  return null;
+}
 
 function makeSessionToken() {
   return crypto.randomBytes(32).toString("hex");
@@ -950,12 +964,11 @@ function getSession(req) {
   const cookies = parseCookies(req);
   const auth = req.headers["authorization"] || "";
   const token = auth.replace("Bearer ", "").trim() || cookies["kitsari_sess"] || req.query._sess;
-  if (!token) return null;
-  const sess = dbSessionGet(token);
+  if (!token || token.startsWith("_state_")) return null;
+  const sess = sessGet(token);
   if (!sess) return null;
-  const SESSION_TTL_LOCAL = 7*24*60*60*1000;
-  if (Date.now() - (sess.loggedInAt||0) > SESSION_TTL_LOCAL) { dbSessionDel(token); return null; }
-  return { ...sess, token };
+  if (Date.now() - (sess.loggedInAt||0) > SESSION_TTL) { sessDel(token); return null; }
+  return sess;
 }
 function requireHolder(req, res, next) {
   const sess = getSession(req);
@@ -1104,32 +1117,31 @@ app.get("/api/auth/discord/callback", async (req, res) => {
 
     // Issue session — wallet linkage happens separately
     const sessionToken = makeSessionToken();
-    holderSessions[sessionToken] = {
-      discordId:  user.id,
-      username:   user.username,
-      globalName: user.global_name || user.username,
-      avatar:     user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null,
-      isHolder:   hasWanderer || isAdmin, // admin always gets access
-      isAdmin,
-      hasWanderer,
-      wallet:     null,   // connected after login via /api/auth/link-wallet
-      nftCount:   0,
-      nftVerified:false,
-      loggedInAt: Date.now(),
-      discordRoles: roles,
+    const sessData = {
+      discordId:   user.id,
+      username:    user.username,
+      globalName:  user.global_name || user.username,
+      avatar:      user.avatar ? "https://cdn.discordapp.com/avatars/" + user.id + "/" + user.avatar + ".png" : null,
+      isHolder:    hasWanderer || isAdmin,
+      isAdmin:     isAdmin,
+      hasWanderer: hasWanderer,
+      wallet:      null,
+      nftVerified: false,
+      loggedInAt:  Date.now(),
     };
 
-    // Log the numeric ID so admin can set DISCORD_ADMIN_ID
-    console.log("[Discord Auth] LOGIN COMPLETE — Discord numeric ID:", user.id, "| username:", user.username);
+    console.log("[Discord Auth] Session for:", user.username, "| id:", user.id, "| isAdmin:", isAdmin, "| isHolder:", sessData.isHolder);
 
     const cookieOpts = "; Path=/; Max-Age=604800; SameSite=Lax; HttpOnly";
 
     if (!hasWanderer && !isAdmin) {
-      holderSessions[sessionToken].isHolder = false;
+      sessData.isHolder = false;
+      sessSet(sessionToken, sessData);
       res.setHeader("Set-Cookie", "kitsari_sess=" + sessionToken + cookieOpts);
       return res.redirect("/holder?auth=not_holder");
     }
 
+    sessSet(sessionToken, sessData);
     res.setHeader("Set-Cookie", "kitsari_sess=" + sessionToken + cookieOpts);
     res.redirect("/holder?auth=success");
   } catch (err) {
@@ -1144,7 +1156,7 @@ app.post("/api/auth/link-wallet", requireHolder, async (req, res) => {
   if (!walletAddress) return res.status(400).json({ error: "walletAddress required" });
 
   const nftCheck = await checkSolanaNFTOwnership(walletAddress);
-  const sess = holderSessions[req.session.token];
+  const sess = getSession(req);
   if (sess) {
     sess.wallet      = walletAddress;
     sess.nftVerified = nftCheck.holds;
@@ -1183,13 +1195,13 @@ app.get("/api/auth/me", (req, res) => {
 // ── Logout ────────────────────────────────────────────────────────────
 app.post("/api/auth/logout", (req, res) => {
   const sess = getSession(req);
-  if (sess) delete holderSessions[sess.token];
+  if (sess) sessDel(sess.token);
   res.setHeader("Set-Cookie", "kitsari_sess=; Path=/; Max-Age=0");
   res.json({ loggedOut: true });
 });
 app.get("/api/auth/logout", (req, res) => {
   const sess = getSession(req);
-  if (sess) delete holderSessions[sess.token];
+  if (sess) sessDel(sess.token);
   res.setHeader("Set-Cookie", "kitsari_sess=; Path=/; Max-Age=0");
   res.redirect("/holder");
 });
