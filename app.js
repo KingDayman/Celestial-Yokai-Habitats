@@ -1,11 +1,161 @@
-// ✦ Kitsari Commerce Console v2 — app.js — production build
-// All fixes applied: scope %20, keystring:secret header, shopId parseInt,
-// correct Printify shop 27645497, all variants, Sonnet model, route order
-
+// ✦ Kitsari Commerce Console v2.1 — SQLite + OpenAI + rate limiting
 const express  = require("express");
 const Anthropic = require("@anthropic-ai/sdk");
 const path     = require("path");
 const crypto   = require("crypto");
+
+// ── SQLite — persistent sessions + draft queue ───────────────────────────
+let db;
+try {
+  const Database = require("better-sqlite3");
+  const DB_PATH  = process.env.DB_PATH || path.join(__dirname, "kitsari.db");
+  db = new Database(DB_PATH);
+  db.pragma("journal_mode = WAL");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token        TEXT PRIMARY KEY,
+      discord_id   TEXT NOT NULL,
+      username     TEXT,
+      global_name  TEXT,
+      avatar       TEXT,
+      is_admin     INTEGER DEFAULT 0,
+      is_holder    INTEGER DEFAULT 0,
+      has_wanderer INTEGER DEFAULT 0,
+      wallet       TEXT,
+      nft_verified INTEGER DEFAULT 0,
+      logged_in_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS drafts (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      discord_id       TEXT NOT NULL,
+      submitter_name   TEXT,
+      submitter_avatar TEXT,
+      product_type     TEXT DEFAULT 'sticker',
+      concept          TEXT,
+      ai_draft         TEXT,
+      notes            TEXT,
+      status           TEXT DEFAULT 'pending',
+      review_note      TEXT,
+      reviewed_at      INTEGER,
+      submitted_at     INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      key          TEXT PRIMARY KEY,
+      count        INTEGER DEFAULT 0,
+      window_start INTEGER NOT NULL
+    );
+  `);
+  console.log("[DB] SQLite connected:", DB_PATH);
+} catch (e) {
+  console.warn("[DB] SQLite unavailable, using in-memory:", e.message);
+  db = null;
+}
+
+// ── DB helpers ─────────────────────────────────────────────────────────
+const _mS = {}; const _mD = []; let _mDid = 1;
+function dbSessionSet(token, s) {
+  if (db) db.prepare(`INSERT OR REPLACE INTO sessions
+    (token,discord_id,username,global_name,avatar,is_admin,is_holder,has_wanderer,wallet,nft_verified,logged_in_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+    token,s.discordId,s.username,s.globalName||null,s.avatar||null,
+    s.isAdmin?1:0,s.isHolder?1:0,s.hasWanderer?1:0,s.wallet||null,s.nftVerified?1:0,s.loggedInAt||Date.now());
+  else _mS[token]=s;
+}
+function dbSessionGet(token) {
+  if (db) {
+    const r=db.prepare("SELECT * FROM sessions WHERE token=?").get(token);
+    if(!r)return null;
+    return {token,discordId:r.discord_id,username:r.username,globalName:r.global_name,
+      avatar:r.avatar,isAdmin:!!r.is_admin,isHolder:!!r.is_holder,hasWanderer:!!r.has_wanderer,
+      wallet:r.wallet,nftVerified:!!r.nft_verified,loggedInAt:r.logged_in_at};
+  }
+  return _mS[token]||null;
+}
+function dbSessionDel(token){ if(db)db.prepare("DELETE FROM sessions WHERE token=?").run(token); else delete _mS[token]; }
+function dbSessionUpdate(token,fields){ const s=dbSessionGet(token); if(s)dbSessionSet(token,{...s,...fields}); }
+function dbSessionList(){
+  if(db)return db.prepare("SELECT * FROM sessions ORDER BY logged_in_at DESC").all().map(r=>({
+    discordId:r.discord_id,username:r.username,globalName:r.global_name,avatar:r.avatar,
+    isAdmin:!!r.is_admin,isHolder:!!r.is_holder,hasWanderer:!!r.has_wanderer,
+    wallet:r.wallet,nftVerified:!!r.nft_verified,verifiedAt:new Date(r.logged_in_at).toISOString()
+  }));
+  return Object.values(_mS);
+}
+function dbDraftAdd(d){
+  if(db){
+    const res=db.prepare(`INSERT INTO drafts
+      (discord_id,submitter_name,submitter_avatar,product_type,concept,ai_draft,notes,submitted_at)
+      VALUES(?,?,?,?,?,?,?,?)`).run(
+      d.discordId,d.submitterName||null,d.submitterAvatar||null,
+      d.productType||'sticker',d.concept||null,d.aiDraft||null,d.notes||null,Date.now());
+    return res.lastInsertRowid;
+  }
+  const id=_mDid++;
+  _mD.push({id,...d,status:'pending',submittedAt:new Date().toISOString()});
+  return id;
+}
+function dbDraftList(filter){
+  const toObj=r=>({id:r.id,discordId:r.discord_id||r.discordId,submitterName:r.submitter_name||r.submitterName,
+    submitterAvatar:r.submitter_avatar||r.submitterAvatar,productType:r.product_type||r.productType,
+    concept:r.concept,aiDraft:r.ai_draft||r.aiDraft,notes:r.notes,status:r.status,
+    reviewNote:r.review_note||r.reviewNote,
+    submittedAt:r.submitted_at?new Date(r.submitted_at).toISOString():r.submittedAt,
+    reviewedAt:r.reviewed_at?new Date(r.reviewed_at).toISOString():null});
+  if(db){
+    return filter&&filter!=='all'
+      ?db.prepare("SELECT * FROM drafts WHERE status=? ORDER BY submitted_at DESC").all(filter).map(toObj)
+      :db.prepare("SELECT * FROM drafts ORDER BY submitted_at DESC").all().map(toObj);
+  }
+  return filter&&filter!=='all'?_mD.filter(d=>d.status===filter).map(toObj):[..._mD].map(toObj);
+}
+function dbDraftMine(discordId){
+  const toObj=r=>({id:r.id||r.id,productType:r.product_type||r.productType,concept:r.concept,
+    status:r.status,reviewNote:r.review_note||r.reviewNote,
+    submittedAt:r.submitted_at?new Date(r.submitted_at).toISOString():r.submittedAt});
+  if(db)return db.prepare("SELECT * FROM drafts WHERE discord_id=? ORDER BY submitted_at DESC").all(discordId).map(toObj);
+  return _mD.filter(d=>d.discordId===discordId).map(toObj);
+}
+function dbDraftUpdate(id,fields){
+  if(db){
+    const map={reviewNote:'review_note',reviewedAt:'reviewed_at',status:'status'};
+    const cols=Object.keys(fields).map(k=>( map[k]||k )+'=?').join(',');
+    db.prepare(`UPDATE drafts SET ${cols} WHERE id=?`).run(...Object.values(fields),id);
+  } else { const d=_mD.find(x=>x.id===id); if(d)Object.assign(d,fields); }
+}
+
+// ── Rate limiting ──────────────────────────────────────────────────────
+const RATE_WINDOW = 60000;
+const RATE_LIMITS = { chat:{free:10,yc:30}, meme:{free:3,yc:10}, draft:{free:5,yc:20}, imggen:{free:2,yc:8} };
+function checkRate(discordId, action, hasYC=false){
+  const key=discordId+':'+action;
+  const lim=RATE_LIMITS[action]||{free:5,yc:15};
+  const max=hasYC?lim.yc:lim.free;
+  const now=Date.now();
+  if(db){
+    const row=db.prepare("SELECT * FROM rate_limits WHERE key=?").get(key);
+    if(!row||now-row.window_start>RATE_WINDOW){
+      db.prepare("INSERT OR REPLACE INTO rate_limits(key,count,window_start)VALUES(?,1,?)").run(key,now);
+      return {allowed:true,count:1,max};
+    }
+    if(row.count>=max)return{allowed:false,count:row.count,max};
+    db.prepare("UPDATE rate_limits SET count=count+1 WHERE key=?").run(key);
+    return{allowed:true,count:row.count+1,max};
+  }
+  if(!global._rl)global._rl={};
+  const r=global._rl[key];
+  if(!r||now-r.start>RATE_WINDOW){global._rl[key]={count:1,start:now};return{allowed:true,count:1,max};}
+  if(r.count>=max)return{allowed:false,count:r.count,max};
+  r.count++;return{allowed:true,count:r.count,max};
+}
+
+// ── OpenAI / DALL-E ───────────────────────────────────────────────────
+let openai=null;
+try{
+  const {OpenAI}=require("openai");
+  const key=process.env.OPENAI_API_KEY;
+  if(key){openai=new OpenAI({apiKey:key});console.log("[OpenAI] DALL-E ready");}
+  else console.warn("[OpenAI] OPENAI_API_KEY not set");
+}catch(e){console.warn("[OpenAI] Package not available:",e.message);}
 
 const app  = express();
 const PORT = process.env.PORT || 8080;
@@ -579,7 +729,16 @@ app.post("/api/agent/kitsari", async (req, res) => {
 
 app.post("/api/commerce/generate-product", async (req, res) => {
   req.setTimeout(120000);
-  const { productType = "sticker", theme, stickerStyle, nftAngle } = req.body;
+  const { productType = "sticker", theme, stickerStyle, nftAngle, hasYC = false } = req.body;
+  const sess = getSession(req);
+  if (sess?.discordId) {
+    const rl = checkRate(sess.discordId, "draft", hasYC);
+    if (!rl.allowed) return res.status(429).json({
+      error: "Draft limit reached (" + rl.count + "/" + rl.max + " per minute).",
+      upgrade: "Spend 5 YC to unlock 20 drafts/minute. Coming soon.",
+      retryAfter: 60
+    });
+  }
   const ctx = productType === "sticker"
     ? `PRODUCT TYPE: Kiss-cut vinyl sticker\nSTICKER STYLE: ${stickerStyle || "sigil"}\nFormat: die-cut.`
     : productType === "poster" ? "PRODUCT TYPE: Art print/poster."
@@ -652,18 +811,24 @@ app.get("/health", (req, res) => res.json({
 // Add to app.js after existing routes, before static/SPA fallback
 // ════════════════════════════════════════════════════════════════════════
 
-const DISCORD_CLIENT_ID     = process.env.DISCORD_CLIENT_ID     || "1518077281665286324";
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || "4GSQyUpYybtUBrED1Nary0WbXefkQqad";
+const DISCORD_CLIENT_ID     = process.env.DISCORD_CLIENT_ID;
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const DISCORD_GUILD_ID      = process.env.DISCORD_GUILD_ID      || "1489281154522677280";
 const DISCORD_WANDERER_ROLE = process.env.DISCORD_WANDERER_ROLE_ID || "1504725209087869009";
-const DISCORD_REDIRECT_URI  = process.env.DISCORD_REDIRECT_URI  || "https://celestial-yokai-habitats-production.up.railway.app/api/auth/discord/callback";
-const DISCORD_ADMIN_ID      = process.env.DISCORD_ADMIN_ID      || "834262283826757663";
+const DISCORD_REDIRECT_URI  = process.env.DISCORD_REDIRECT_URI;
+const DISCORD_ADMIN_ID      = process.env.DISCORD_ADMIN_ID || "834262283826757663"; // also set in Railway vars
 const KITSARI_CONTRACT      = process.env.KITSARI_CONTRACT       || "AtYGtFGHHkqBURkXrLkurUfLo929mhU2hmtUznfri1rg";
 const HELIUS_RPC            = process.env.HELIUS_RPC             || "https://api.mainnet-beta.solana.com";
 
 // In-memory session store (resets on redeploy — acceptable for now)
-const holderSessions = {}; // token → { discordId, username, avatar, isAdmin, isHolder, wallet, loggedInAt }
-const draftQueue     = []; // { id, submittedAt, submittedBy, status, draft, productType, notes }
+// Sessions now in SQLite — holderSessions kept as alias for compatibility
+const holderSessions = new Proxy({}, {
+  get(t,k){ return dbSessionGet(k); },
+  set(t,k,v){ dbSessionSet(k,v); return true; },
+  deleteProperty(t,k){ dbSessionDel(k); return true; }
+}); // → { discordId, username, avatar, isAdmin, isHolder, wallet, loggedInAt }
+// Draft queue now in SQLite
+const draftQueue = []; // id, submittedAt, submittedBy, status, draft, productType, notes }
 const SESSION_TTL    = 24 * 60 * 60 * 1000; // 24 hours
 
 function makeSessionToken() {
@@ -683,9 +848,10 @@ function getSession(req) {
   const auth = req.headers["authorization"] || "";
   const token = auth.replace("Bearer ", "").trim() || cookies["kitsari_sess"] || req.query._sess;
   if (!token) return null;
-  const sess = holderSessions[token];
+  const sess = dbSessionGet(token);
   if (!sess) return null;
-  if (Date.now() - sess.loggedInAt > SESSION_TTL) { delete holderSessions[token]; return null; }
+  const SESSION_TTL_LOCAL = 7*24*60*60*1000;
+  if (Date.now() - (sess.loggedInAt||0) > SESSION_TTL_LOCAL) { dbSessionDel(token); return null; }
   return { ...sess, token };
 }
 function requireHolder(req, res, next) {
@@ -1121,10 +1287,11 @@ app.get('/api/admin/sessions', requireAdmin, (req, res) => {
 // BULLETIN BOARD — public feed of approved/pending holder submissions
 // ════════════════════════════════════════════════════════════════════════
 app.get("/api/bulletin", (req, res) => {
-  const public_items = draftQueue
+  const public_items = dbDraftList("all")
     .filter(d => d.status === "pending" || d.status === "approved")
-    .slice(-30).reverse()
+    .slice(0, 30)
     .map(d => ({
+
       id:          d.id,
       submitterName: d.submitterName || "Anonymous Yokai",
       productType: d.productType,
@@ -1176,8 +1343,15 @@ async function kitsariChat(messages, max = 1200) {
 
 app.post("/api/holder/chat", requireHolder, async (req, res) => {
   req.setTimeout(90000);
-  const { message, history = [], mode = "chat" } = req.body;
+  const { message, history = [], mode = "chat", hasYC = false } = req.body;
   if (!message?.trim()) return res.status(400).json({ error: "Message required" });
+  const sess = getSession(req);
+  const rl = checkRate(sess?.discordId || "anon", "chat", hasYC);
+  if (!rl.allowed) return res.status(429).json({
+    error: "Rate limit reached (" + rl.count + "/" + rl.max + " per minute).",
+    upgrade: "Spend 10 YC to unlock 30 messages/minute. Coming soon.",
+    retryAfter: 60
+  });
 
   const systemAddons = {
     xpost:   "\nFocus: Generate X (Twitter) posts. Make them punchy, mystical, community-focused. Include relevant hashtags like #CelestialYokai #Solana #NFT.",
@@ -1206,7 +1380,14 @@ app.post("/api/holder/chat", requireHolder, async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════
 app.post("/api/holder/generate-memes", requireHolder, async (req, res) => {
   req.setTimeout(120000);
-  const { imageBase64, mimeType = "image/png", nftName = "Kitsari NFT" } = req.body;
+  const { imageBase64, mimeType = "image/png", nftName = "Kitsari NFT", hasYC = false } = req.body;
+  const sess = getSession(req);
+  const rl = checkRate(sess?.discordId || "anon", "meme", hasYC);
+  if (!rl.allowed) return res.status(429).json({
+    error: "Meme forge limit reached (" + rl.count + "/" + rl.max + " per minute).",
+    upgrade: "Spend 5 YC to unlock 10 memes/minute. Coming soon.",
+    retryAfter: 60
+  });
   if (!imageBase64) return res.status(400).json({ error: "imageBase64 required" });
 
   try {
