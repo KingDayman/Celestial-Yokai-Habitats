@@ -388,10 +388,18 @@ function goSection(name,el){
 
 async function checkSession(){
   try{
-    const r=await fetch('/api/auth/me');const d=await r.json();
-    if(d.loggedIn&&(d.isHolder||d.isAdmin)){currentUser=d;showDashboard();}
-    else{showLogin();if(d.loggedIn&&!d.isHolder)show('not-holder-msg');}
-  }catch(e){showLogin();}
+    const r=await fetch('/api/auth/me');
+    if(!r.ok){showLogin();return;}
+    const d=await r.json();
+    if(d.loggedIn&&(d.isHolder||d.isAdmin)){
+      currentUser=d;
+      showDashboard();
+      setTimeout(()=>{loadYCStatus().catch(()=>{});},800);
+    } else {
+      showLogin();
+      if(d.loggedIn&&!d.isHolder)show('not-holder-msg');
+    }
+  }catch(e){console.warn('Session check error:',e.message);showLogin();}
 }
 
 function showLogin(){$('page-login').classList.add('active');$('page-dashboard').classList.remove('active');hide('nav-user');const p=new URLSearchParams(location.search);if(p.get('auth')==='not_holder')show('not-holder-msg');if(location.search)history.replaceState({},'','/holder');}
@@ -454,7 +462,7 @@ async function submitDraft(){
   $('submit-btn').disabled=true;$('submit-btn').textContent='SUBMITTING...';
   hideMsg('draft-err');hideMsg('draft-ok');
   try{
-    const r=await fetch('/api/drafts/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...generatedDraft,notes})});
+    const r=await fetch('/api/holder/submit-draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...generatedDraft,notes})});
     const d=await r.json();if(!r.ok)throw new Error(d.error||'Failed');
     showOk('draft-ok','Draft #'+d.draftId+' submitted. Queue position: '+d.position);
     generatedDraft=null;hide('draft-preview-wrap');$('submit-btn').style.display='none';
@@ -479,13 +487,15 @@ async function generateMemes(){
   try{
     const r=await fetch('/api/holder/generate-memes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageBase64:memeB64,mimeType:memeMime,nftName:$('meme-name')?.value||'Kitsari NFT'})});
     const d=await r.json();if(!r.ok)throw new Error(d.error||'Failed');
-    renderMemes(d.memes);
+    renderMemes(d.memes, d.nftAnalysis);
   }catch(e){showErr('meme-err',e.message);}
   finally{sp('meme-spinner',false);$('meme-btn').disabled=false;$('meme-btn').textContent='FORGE 4 MEMES ✦';}
 }
 
-function renderMemes(memes){
-  window._memes=memes;const grid=$('meme-grid');if(!grid)return;
+function renderMemes(memes, nftAnalysis){
+  window._memes=memes;
+  if(nftAnalysis !== undefined) window._nftAnalysis = nftAnalysis;
+  const grid=$('meme-grid');if(!grid)return;
   grid.innerHTML=memes.map((m,i)=>`
     <div class="meme-card">
       <button class="meme-copy-btn" onclick="copyMeme(${i})">COPY</button>
@@ -504,7 +514,7 @@ function copyMeme(i){const m=window._memes?.[i];if(!m)return;const t=m.topText+'
 async function loadMyDrafts(){
   sp('mydrafts-spinner',true);
   try{
-    const r=await fetch('/api/drafts/mine');const d=await r.json();const list=$('mydrafts-list');
+    const r=await fetch('/api/holder/my-drafts');const d=await r.json();const list=$('mydrafts-list');
     if(!d.drafts?.length){list.innerHTML='<div class="empty"><span class="empty-icon">📜</span>No submissions yet.</div>';return;}
     list.innerHTML=d.drafts.slice().reverse().map(dr=>`
       <div class="draft-card ${dr.status}">
@@ -519,8 +529,8 @@ async function loadMyDrafts(){
 async function loadQueue(filter){
   if(filter)currentQFilter=filter;sp('queue-spinner',true);
   try{
-    const url='/api/admin/drafts'+(currentQFilter&&currentQFilter!=='all'?'?status='+currentQFilter:'');
-    const [qr,ar]=await Promise.all([fetch(url),fetch('/api/admin/drafts')]);
+    const url='/api/admin/queue'+(currentQFilter&&currentQFilter!=='all'?'?status='+currentQFilter:'');
+    const [qr,ar]=await Promise.all([fetch(url),fetch('/api/admin/queue')]);
     const qd=await qr.json();const ad=await ar.json();const all=ad.drafts||[];
     setTxt('qs-pending',all.filter(x=>x.status==='pending').length);
     setTxt('qs-approved',all.filter(x=>x.status==='approved').length);
@@ -546,12 +556,12 @@ function togglePrev(id){const e=$('prev-'+id);if(e)e.classList.toggle('expanded'
 
 async function approveDraft(id){
   const note=($('note-'+id)?.value||'').trim();
-  try{const r=await fetch('/api/admin/drafts/'+id+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});if(!r.ok)throw new Error((await r.json()).error);loadQueue(currentQFilter);}
+  try{const r=await fetch('/api/admin/approve/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});if(!r.ok)throw new Error((await r.json()).error);loadQueue(currentQFilter);}
   catch(e){alert('Failed: '+e.message);}
 }
 async function rejectDraft(id){
   const note=($('note-'+id)?.value||'').trim()||'Not approved at this time.';
-  try{const r=await fetch('/api/admin/drafts/'+id+'/reject',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});if(!r.ok)throw new Error((await r.json()).error);loadQueue(currentQFilter);}
+  try{const r=await fetch('/api/admin/reject/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});if(!r.ok)throw new Error((await r.json()).error);loadQueue(currentQFilter);}
   catch(e){alert('Failed: '+e.message);}
 }
 
@@ -596,11 +606,7 @@ async function generateImages(){
 }
 
 // Store NFT analysis globally for image generation
-const _origRenderMemes=renderMemes;
-function renderMemes(memes,analysis){
-  window._nftAnalysis=analysis||'';
-  _origRenderMemes(memes);
-}
+// (renderMemes already exists above — just call it normally)
 
 // Handle rate limit errors in all fetch calls gracefully
 async function apiPost(url, body){
@@ -613,7 +619,9 @@ async function apiPost(url, body){
 // ── YC UPGRADES ───────────────────────────────────────────────────────
 async function loadYCStatus(){
   try{
-    const r=await fetch('/api/holder/yc-status');const d=await r.json();
+    const r=await fetch('/api/holder/yc-status');
+    if(!r.ok) return; // not logged in or not holder — silently skip
+    const d=await r.json();
     const grid=$('yc-status-grid');if(!grid)return;
     const labels={chat:'CHAT',draft:'DRAFT GEN',meme:'MEME FORGE',imggen:'IMAGE GEN'};
     const icons={chat:'🦊',draft:'📜',meme:'🎭',imggen:'🎨'};
@@ -697,9 +705,6 @@ async function loadYCSales(){
 }
 
 checkSession();
-// Load YC status after session confirmed
-const _origShowDash=showDashboard;
-function showDashboard(){_origShowDash();setTimeout(loadYCStatus,500);}
 
 </script>
 </body>
