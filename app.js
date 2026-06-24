@@ -44,6 +44,28 @@ try {
       count        INTEGER DEFAULT 0,
       window_start INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS yc_upgrades (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      discord_id   TEXT NOT NULL,
+      action       TEXT NOT NULL,
+      tx_sig       TEXT NOT NULL UNIQUE,
+      yc_amount    INTEGER NOT NULL,
+      wallet_from  TEXT,
+      purchased_at INTEGER NOT NULL,
+      expires_at   INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS yc_sales (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      discord_id   TEXT NOT NULL,
+      username     TEXT,
+      action       TEXT NOT NULL,
+      yc_amount    INTEGER NOT NULL,
+      usd_equiv    REAL DEFAULT 0,
+      tx_sig       TEXT NOT NULL UNIQUE,
+      wallet_from  TEXT,
+      burn_wallet  TEXT NOT NULL,
+      sold_at      INTEGER NOT NULL
+    );
   `);
   console.log("[DB] SQLite connected:", DB_PATH);
 } catch (e) {
@@ -126,7 +148,88 @@ function dbDraftUpdate(id,fields){
 // ── Rate limiting ──────────────────────────────────────────────────────
 const RATE_WINDOW = 60000;
 const RATE_LIMITS = { chat:{free:10,yc:30}, meme:{free:3,yc:10}, draft:{free:5,yc:20}, imggen:{free:2,yc:8} };
+const YC_PRICES = { chat:100000, draft:50000, meme:50000, imggen:100000 }; // YC required per upgrade
+const YC_MINT        = "7bPUfM26oCHkVLXNpDR7dgwmGoTiaTsaK2uPSAHUpump";
+const BURN_WALLET    = "HCjg9usafd2QcecA5KacRJg98AzeM5ExafUEA5LVp2ah";
+const YC_UPGRADE_DAYS = 30; // upgrade lasts 30 days
+const SOLANA_RPC     = process.env.HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
+
+// Check if a holder has an active YC upgrade for an action
+function hasYCUpgrade(discordId, action) {
+  if (!db) return false;
+  const now = Date.now();
+  const row = db.prepare(
+    "SELECT id FROM yc_upgrades WHERE discord_id=? AND action=? AND expires_at>? ORDER BY expires_at DESC LIMIT 1"
+  ).get(discordId, action, now);
+  return !!row;
+}
+
+// Verify a Solana transaction sent YC to the burn wallet
+async function verifyYCTransaction(txSig, requiredAmount) {
+  try {
+    const resp = await fetch(SOLANA_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1,
+        method: "getTransaction",
+        params: [txSig, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 }],
+      }),
+    });
+    const data = await resp.json();
+    const tx = data?.result;
+    if (!tx) return { valid: false, error: "Transaction not found or not confirmed yet" };
+    if (tx.meta?.err) return { valid: false, error: "Transaction failed on-chain" };
+
+    // Parse token balance changes to find YC transfer to burn wallet
+    const preBalances  = tx.meta?.preTokenBalances  || [];
+    const postBalances = tx.meta?.postTokenBalances || [];
+
+    // Find accounts that gained YC (destination)
+    let burnReceived = 0;
+    let senderWallet = null;
+
+    for (const post of postBalances) {
+      if (post.mint !== YC_MINT) continue;
+      const pre = preBalances.find(p => p.accountIndex === post.accountIndex);
+      const preAmt  = parseInt(pre?.uiTokenAmount?.amount  || "0");
+      const postAmt = parseInt(post.uiTokenAmount?.amount  || "0");
+      const gained  = postAmt - preAmt;
+      if (gained > 0 && post.owner === BURN_WALLET) {
+        burnReceived += gained;
+      }
+    }
+
+    // Find sender (lost YC)
+    for (const pre of preBalances) {
+      if (pre.mint !== YC_MINT) continue;
+      const post = postBalances.find(p => p.accountIndex === pre.accountIndex);
+      const preAmt  = parseInt(pre.uiTokenAmount?.amount  || "0");
+      const postAmt = parseInt(post?.uiTokenAmount?.amount || "0");
+      if (preAmt > postAmt) {
+        senderWallet = pre.owner;
+        break;
+      }
+    }
+
+    // YC has 6 decimals on pump.fun
+    const ycDecimals = 6;
+    const burnReceivedHuman = burnReceived / Math.pow(10, ycDecimals);
+
+    console.log("[YC] tx:", txSig, "burnReceived:", burnReceivedHuman, "required:", requiredAmount);
+
+    if (burnReceivedHuman < requiredAmount) {
+      return { valid: false, error: "Insufficient YC sent. Got " + burnReceivedHuman.toLocaleString() + " YC, need " + requiredAmount.toLocaleString() + " YC." };
+    }
+    return { valid: true, amountHuman: burnReceivedHuman, amountRaw: burnReceived, senderWallet };
+  } catch (e) {
+    console.error("[YC] Verify error:", e.message);
+    return { valid: false, error: "Verification failed: " + e.message };
+  }
+}
 function checkRate(discordId, action, hasYC=false){
+  // Auto-upgrade if they have an active YC purchase
+  if(!hasYC && discordId) hasYC=hasYCUpgrade(discordId, action);
   const key=discordId+':'+action;
   const lim=RATE_LIMITS[action]||{free:5,yc:15};
   const max=hasYC?lim.yc:lim.free;
@@ -1476,6 +1579,149 @@ Make each meme distinct. Reference specific traits from the NFT analysis.`,
   } catch (e) {
     res.status(500).json({ error: "Meme generation failed: " + e.message });
   }
+});
+
+
+// ════════════════════════════════════════════════════════════════════════
+// YC UPGRADE SYSTEM — on-chain verification + sales tracking + burn
+// ════════════════════════════════════════════════════════════════════════
+
+// Get upgrade status and pricing for the current holder
+app.get("/api/holder/yc-status", requireHolder, (req, res) => {
+  const sess = getSession(req);
+  const now  = Date.now();
+  const actions = ["chat","draft","meme","imggen"];
+  const status = {};
+  for (const action of actions) {
+    const upgraded = hasYCUpgrade(sess.discordId, action);
+    let expiresAt = null;
+    if (db && upgraded) {
+      const row = db.prepare(
+        "SELECT expires_at FROM yc_upgrades WHERE discord_id=? AND action=? AND expires_at>? ORDER BY expires_at DESC LIMIT 1"
+      ).get(sess.discordId, action, now);
+      expiresAt = row ? new Date(row.expires_at).toISOString() : null;
+    }
+    status[action] = {
+      upgraded,
+      expiresAt,
+      freeLimit: RATE_LIMITS[action]?.free || 5,
+      ycLimit:   RATE_LIMITS[action]?.yc   || 15,
+      ycPrice:   YC_PRICES[action] || 50000,
+    };
+  }
+  res.json({
+    discordId:   sess.discordId,
+    burnWallet:  BURN_WALLET,
+    ycMint:      YC_MINT,
+    upgradeDays: YC_UPGRADE_DAYS,
+    status,
+  });
+});
+
+// Verify a YC payment transaction and activate upgrade
+app.post("/api/holder/yc-upgrade", requireHolder, async (req, res) => {
+  const { txSig, action } = req.body;
+  if (!txSig || !action) return res.status(400).json({ error: "txSig and action required" });
+  if (!YC_PRICES[action]) return res.status(400).json({ error: "Invalid action: " + action });
+
+  const sess     = getSession(req);
+  const required = YC_PRICES[action];
+
+  // Check if this tx was already used
+  if (db) {
+    const existing = db.prepare("SELECT id FROM yc_upgrades WHERE tx_sig=?").get(txSig);
+    if (existing) return res.status(400).json({ error: "This transaction has already been used to activate an upgrade." });
+  }
+
+  // Verify on Solana
+  const verification = await verifyYCTransaction(txSig, required);
+  if (!verification.valid) return res.status(400).json({ error: verification.error });
+
+  const now       = Date.now();
+  const expiresAt = now + (YC_UPGRADE_DAYS * 24 * 60 * 60 * 1000);
+
+  // Record upgrade
+  if (db) {
+    db.prepare(`INSERT OR IGNORE INTO yc_upgrades
+      (discord_id,action,tx_sig,yc_amount,wallet_from,purchased_at,expires_at)
+      VALUES (?,?,?,?,?,?,?)`
+    ).run(sess.discordId, action, txSig, verification.amountRaw, verification.senderWallet||null, now, expiresAt);
+
+    // Record sale for burn tracking
+    db.prepare(`INSERT OR IGNORE INTO yc_sales
+      (discord_id,username,action,yc_amount,tx_sig,wallet_from,burn_wallet,sold_at)
+      VALUES (?,?,?,?,?,?,?,?)`
+    ).run(
+      sess.discordId, sess.username||"Unknown", action,
+      verification.amountRaw, txSig, verification.senderWallet||null,
+      BURN_WALLET, now
+    );
+  }
+
+  const labels = { chat:"Chat (30/min)", draft:"Draft Gen (20/min)", meme:"Meme Forge (10/min)", imggen:"Image Gen (8/min)" };
+  console.log("[YC] Upgrade activated:", sess.username, action, verification.amountHuman, "YC");
+
+  res.json({
+    success:    true,
+    action,
+    label:      labels[action] || action,
+    ycAmount:   verification.amountHuman,
+    expiresAt:  new Date(expiresAt).toISOString(),
+    message:    "Upgrade active for 30 days. " + (labels[action]||action) + " unlocked.",
+  });
+});
+
+// ── ADMIN: YC Sales History ──────────────────────────────────────────────
+app.get("/api/admin/yc-sales", requireAdmin, (req, res) => {
+  if (!db) return res.json({ sales:[], totals:{}, burnSummary:[] });
+
+  const sales = db.prepare("SELECT * FROM yc_sales ORDER BY sold_at DESC").all().map(r => ({
+    id:          r.id,
+    discordId:   r.discord_id,
+    username:    r.username,
+    action:      r.action,
+    ycAmount:    r.yc_amount / 1e6, // convert from raw
+    txSig:       r.tx_sig,
+    walletFrom:  r.wallet_from,
+    burnWallet:  r.burn_wallet,
+    soldAt:      new Date(r.sold_at).toISOString(),
+    month:       new Date(r.sold_at).toISOString().slice(0,7),
+  }));
+
+  // Monthly burn summary
+  const monthMap = {};
+  for (const s of sales) {
+    if (!monthMap[s.month]) monthMap[s.month] = { month:s.month, totalYC:0, txCount:0, burnWallet:BURN_WALLET };
+    monthMap[s.month].totalYC  += s.ycAmount;
+    monthMap[s.month].txCount  += 1;
+  }
+  const burnSummary = Object.values(monthMap).sort((a,b)=>b.month.localeCompare(a.month));
+
+  const totalYC = sales.reduce((sum,s)=>sum+s.ycAmount, 0);
+  const totals  = {
+    allTime:    totalYC,
+    thisMonth:  burnSummary[0]?.totalYC || 0,
+    txCount:    sales.length,
+    burnWallet: BURN_WALLET,
+    ycMint:     YC_MINT,
+  };
+
+  res.json({ sales, totals, burnSummary });
+});
+
+// CSV export for burn reporting
+app.get("/api/admin/yc-sales/csv", requireAdmin, (req, res) => {
+  if (!db) return res.status(503).send("Database not available");
+  const sales = db.prepare("SELECT * FROM yc_sales ORDER BY sold_at DESC").all();
+  const header = "ID,Discord ID,Username,Action,YC Amount,TX Signature,Wallet From,Burn Wallet,Date\n";
+  const rows = sales.map(r => [
+    r.id, r.discord_id, r.username, r.action,
+    (r.yc_amount/1e6).toFixed(0), r.tx_sig, r.wallet_from||"", r.burn_wallet,
+    new Date(r.sold_at).toISOString()
+  ].map(v=>`"${v}"`).join(",")).join("\n");
+  res.setHeader("Content-Type","text/csv");
+  res.setHeader("Content-Disposition", 'attachment; filename="yc-sales-'+new Date().toISOString().slice(0,10)+'.csv"');
+  res.send(header + rows);
 });
 
 // ── Page routes ───────────────────────────────────
