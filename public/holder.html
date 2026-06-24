@@ -178,9 +178,11 @@ nav{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;border-bottom:1
       <div class="sb-item" id="sb-drafts" onclick="goSection('drafts',this)"><span class="sb-icon">📜</span><span class="sb-label">DRAFTS</span></div>
       <div class="sb-item" id="sb-memes" onclick="goSection('memes',this)"><span class="sb-icon">🎭</span><span class="sb-label">MEME FORGE</span></div>
       <div class="sb-item" id="sb-mydrafts" onclick="goSection('mydrafts',this)"><span class="sb-icon">📋</span><span class="sb-label">MY QUEUE</span></div>
+      <div class="sb-item" id="sb-upgrade" onclick="goSection('upgrade',this)"><span class="sb-icon">⚡</span><span class="sb-label">YC UPGRADES</span></div>
       <div class="sb-sep"></div>
       <div class="sb-item admin-only" id="sb-queue" onclick="goSection('queue',this)"><span class="sb-icon">⚙</span><span class="sb-label">ADMIN QUEUE</span></div>
       <div class="sb-item admin-only" id="sb-sessions" onclick="goSection('sessions',this)"><span class="sb-icon">👁</span><span class="sb-label">SESSIONS</span></div>
+      <div class="sb-item admin-only" id="sb-ycsales" onclick="goSection('ycsales',this)"><span class="sb-icon">🔥</span><span class="sb-label">YC SALES</span></div>
       <div class="sb-item admin-only" onclick="location.href='/console'"><span class="sb-icon">🏮</span><span class="sb-label">CONSOLE</span></div>
     </div>
     <div class="portal-main">
@@ -292,6 +294,58 @@ nav{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;border-bottom:1
         </div>
         <div class="spinner" id="queue-spinner"><div class="sp-dots"><div class="sp-dot"></div><div class="sp-dot"></div><div class="sp-dot"></div></div><span class="sp-txt">Loading queue...</span></div>
         <div id="queue-list"></div>
+      </div>
+
+      <!-- YC UPGRADE -->
+      <div class="section-panel" id="sec-upgrade">
+        <div class="card">
+          <div class="card-title">YOKAI COIN UPGRADES</div>
+          <div style="font-size:.58rem;color:var(--textmid);margin-bottom:.75rem;line-height:1.65">
+            Spend Yokai Coin (YC) to unlock higher rate limits for 30 days.
+            Send YC from your wallet to the burn wallet below, then paste your transaction signature to activate.
+          </div>
+          <div style="background:rgba(155,92,246,.06);border:1px solid rgba(155,92,246,.2);border-radius:var(--r);padding:.65rem .8rem;margin-bottom:.75rem">
+            <div class="f-lbl" style="margin-bottom:.25rem">BURN WALLET (send YC here)</div>
+            <div id="burn-wallet-addr" style="font-size:.52rem;color:var(--teal);word-break:break-all;line-height:1.5;cursor:pointer" onclick="copyAddr()">HCjg9usafd2QcecA5KacRJg98AzeM5ExafUEA5LVp2ah</div>
+            <div style="font-size:.42rem;color:var(--dim);margin-top:.25rem">YC Token CA: 7bPUfM26oCHkVLXNpDR7dgwmGoTiaTsaK2uPSAHUpump</div>
+          </div>
+          <div id="yc-status-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem"></div>
+          <div class="f-lbl" style="margin-bottom:.3rem">ACTIVATE UPGRADE</div>
+          <div class="f-group"><label class="f-lbl">SELECT FEATURE TO UPGRADE</label>
+            <select class="f-select" id="yc-action">
+              <option value="chat">Chat — 30/min (100,000 YC)</option>
+              <option value="draft">Draft Gen — 20/min (50,000 YC)</option>
+              <option value="meme">Meme Forge — 10/min (50,000 YC)</option>
+              <option value="imggen">Image Gen — 8/min (100,000 YC)</option>
+            </select>
+          </div>
+          <div class="f-group"><label class="f-lbl">SOLANA TRANSACTION SIGNATURE</label>
+            <input type="text" class="f-input" id="yc-txsig" placeholder="Paste your tx signature after sending YC..."/></div>
+          <div class="spinner" id="yc-spinner"><div class="sp-dots"><div class="sp-dot"></div><div class="sp-dot"></div><div class="sp-dot"></div></div><span class="sp-txt">Verifying on Solana...</span></div>
+          <div class="err-box" id="yc-err"></div>
+          <div class="ok-box" id="yc-ok"></div>
+          <button class="btn btn-gold" onclick="activateYC()">VERIFY & ACTIVATE ✦</button>
+        </div>
+      </div>
+
+      <!-- ADMIN: YC SALES HISTORY -->
+      <div class="section-panel" id="sec-ycsales">
+        <div class="card">
+          <div class="card-title">YC SALES HISTORY</div>
+          <div class="spinner show" id="ycsales-spinner"><div class="sp-dots"><div class="sp-dot"></div><div class="sp-dot"></div><div class="sp-dot"></div></div><span class="sp-txt">Loading...</span></div>
+          <div id="ycsales-totals" style="display:none;margin-bottom:.75rem">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.65rem" id="ycsales-stats"></div>
+            <div style="font-size:.48rem;color:var(--dim);margin-bottom:.3rem">MONTHLY BURN SUMMARY</div>
+            <div id="ycsales-burn" style="margin-bottom:.65rem"></div>
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.65rem">
+              <a href="/api/admin/yc-sales/csv" class="btn btn-gold btn-sm" download>EXPORT CSV ↓</a>
+              <button class="btn btn-purple btn-sm" onclick="loadYCSales()">REFRESH</button>
+            </div>
+            <div style="font-size:.48rem;color:var(--dim);margin-bottom:.3rem">ALL TRANSACTIONS</div>
+            <div id="ycsales-table" style="overflow-x:auto"></div>
+          </div>
+          <div id="ycsales-empty" style="display:none" class="empty"><span class="empty-icon">🔥</span>No YC sales yet.</div>
+        </div>
       </div>
 
       <!-- SESSIONS -->
@@ -555,7 +609,98 @@ async function apiPost(url, body){
   return r;
 }
 
+
+// ── YC UPGRADES ───────────────────────────────────────────────────────
+async function loadYCStatus(){
+  try{
+    const r=await fetch('/api/holder/yc-status');const d=await r.json();
+    const grid=$('yc-status-grid');if(!grid)return;
+    const labels={chat:'CHAT',draft:'DRAFT GEN',meme:'MEME FORGE',imggen:'IMAGE GEN'};
+    const icons={chat:'🦊',draft:'📜',meme:'🎭',imggen:'🎨'};
+    grid.innerHTML=Object.entries(d.status).map(([action,st])=>`
+      <div style="background:rgba(0,0,0,.35);border:1px solid ${st.upgraded?'rgba(74,222,128,.3)':'var(--borderdim)'};border-radius:var(--r);padding:.6rem .7rem">
+        <div style="font-size:.42rem;letter-spacing:.1em;color:${st.upgraded?'var(--green)':'var(--dim)'};margin-bottom:.25rem">${icons[action]||''} ${labels[action]||action}</div>
+        <div style="font-size:.7rem;color:${st.upgraded?'var(--green)':'var(--text)'};">${st.upgraded?st.ycLimit+'/min':'FREE'}</div>
+        <div style="font-size:.42rem;color:var(--dim);margin-top:.15rem">${st.upgraded?'Expires '+new Date(st.expiresAt).toLocaleDateString():'Free: '+st.freeLimit+'/min | Upgrade: '+st.ycLimit+'/min'}</div>
+        ${!st.upgraded?`<div style="font-size:.4rem;color:var(--gold);margin-top:.2rem">${(st.ycPrice/1000).toFixed(0)}K YC · 30 days</div>`:''}
+      </div>`).join('');
+  }catch(e){console.warn('YC status failed:',e.message);}
+}
+
+async function activateYC(){
+  const txsig=($('yc-txsig')?.value||'').trim();
+  const action=$('yc-action')?.value||'chat';
+  if(!txsig){showErr('yc-err','Paste your transaction signature.');return;}
+  hideMsg('yc-err');hideMsg('yc-ok');
+  sp('yc-spinner',true,'Verifying on Solana...');
+  try{
+    const r=await fetch('/api/holder/yc-upgrade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({txSig:txsig,action})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Verification failed');
+    showOk('yc-ok','Upgrade activated! '+d.label+' unlocked until '+new Date(d.expiresAt).toLocaleDateString()+'. YC: '+d.ycAmount.toLocaleString());
+    if($('yc-txsig'))$('yc-txsig').value='';
+    loadYCStatus();
+  }catch(e){showErr('yc-err',e.message);}
+  finally{sp('yc-spinner',false);}
+}
+
+function copyAddr(){
+  const addr='HCjg9usafd2QcecA5KacRJg98AzeM5ExafUEA5LVp2ah';
+  navigator.clipboard?.writeText(addr).then(()=>{
+    const el=$('burn-wallet-addr');if(el){const orig=el.style.color;el.style.color='var(--green)';setTimeout(()=>el.style.color=orig,1200);}
+  });
+}
+
+async function loadYCSales(){
+  sp('ycsales-spinner',true);
+  try{
+    const r=await fetch('/api/admin/yc-sales');const d=await r.json();
+    hide('ycsales-spinner');
+    if(!d.sales?.length){show('ycsales-empty');return;}
+    show('ycsales-totals');
+    const st=$('ycsales-stats');
+    if(st)st.innerHTML=`
+      <div style="background:rgba(0,0,0,.3);border:1px solid var(--borderdim);border-radius:var(--r);padding:.55rem;text-align:center">
+        <span style="font-size:1.3rem;color:var(--gold);display:block">${d.totals.allTime?.toLocaleString()||0}</span>
+        <span style="font-size:.4rem;letter-spacing:.1em;color:var(--dim)">TOTAL YC SOLD</span>
+      </div>
+      <div style="background:rgba(0,0,0,.3);border:1px solid var(--borderdim);border-radius:var(--r);padding:.55rem;text-align:center">
+        <span style="font-size:1.3rem;color:var(--gold);display:block">${d.totals.thisMonth?.toLocaleString()||0}</span>
+        <span style="font-size:.4rem;letter-spacing:.1em;color:var(--dim)">THIS MONTH</span>
+      </div>
+      <div style="background:rgba(0,0,0,.3);border:1px solid var(--borderdim);border-radius:var(--r);padding:.55rem;text-align:center">
+        <span style="font-size:1.3rem;color:var(--gold);display:block">${d.totals.txCount||0}</span>
+        <span style="font-size:.4rem;letter-spacing:.1em;color:var(--dim)">TRANSACTIONS</span>
+      </div>`;
+    const burn=$('ycsales-burn');
+    if(burn)burn.innerHTML=(d.burnSummary||[]).map(m=>`
+      <div style="display:flex;align-items:center;gap:.5rem;padding:.35rem .6rem;background:rgba(0,0,0,.3);border:1px solid var(--borderdim);border-radius:var(--r);margin-bottom:.3rem;flex-wrap:wrap">
+        <span style="font-size:.55rem;color:var(--text)">${m.month}</span>
+        <span style="font-size:.65rem;color:var(--gold)">${m.totalYC.toLocaleString()} YC</span>
+        <span style="font-size:.42rem;color:var(--dim)">${m.txCount} tx</span>
+        <span style="font-size:.42rem;color:var(--teal);margin-left:auto">→ Burn: ${d.totals.burnWallet?.slice(0,8)}...</span>
+      </div>`).join('');
+    const tbl=$('ycsales-table');
+    if(tbl)tbl.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:.48rem">
+      <thead><tr style="border-bottom:1px solid var(--borderdim);color:var(--dim)">${['#','USER','ACTION','YC','TX','DATE'].map(h=>`<th style="padding:.3rem .4rem;text-align:left;letter-spacing:.08em">${h}</th>`).join('')}</tr></thead>
+      <tbody>${d.sales.map(s=>`<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+        <td style="padding:.28rem .4rem;color:var(--dim)">${s.id}</td>
+        <td style="padding:.28rem .4rem;color:var(--text)">${s.username}</td>
+        <td style="padding:.28rem .4rem;color:var(--purple)">${s.action.toUpperCase()}</td>
+        <td style="padding:.28rem .4rem;color:var(--gold)">${s.ycAmount.toLocaleString()}</td>
+        <td style="padding:.28rem .4rem"><a href="https://solscan.io/tx/${s.txSig}" target="_blank" style="color:var(--teal);font-size:.42rem">${s.txSig.slice(0,12)}...</a></td>
+        <td style="padding:.28rem .4rem;color:var(--dim)">${new Date(s.soldAt).toLocaleDateString()}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }catch(e){$('ycsales-spinner').classList.remove('show');$('ycsales-empty').style.display='block';$('ycsales-empty').textContent='Failed: '+e.message;}
+  finally{sp('ycsales-spinner',false);}
+}
+
 checkSession();
+// Load YC status after session confirmed
+const _origShowDash=showDashboard;
+function showDashboard(){_origShowDash();setTimeout(loadYCStatus,500);}
+
 </script>
 </body>
 </html>
