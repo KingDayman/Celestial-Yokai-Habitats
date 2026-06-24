@@ -252,6 +252,17 @@ nav{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;border-bottom:1
             <div class="f-lbl" style="margin-bottom:.3rem;color:var(--gold)">YOUR 4 MEME CONCEPTS</div>
             <div style="font-size:.44rem;color:var(--dim);margin-bottom:.6rem;opacity:.8">Use your original NFT image and overlay the text above/below to create each meme. Your NFT stays untouched.</div>
             <div class="meme-grid" id="meme-grid"></div>
+            <div style="margin-top:.75rem;padding-top:.65rem;border-top:1px solid var(--borderdim)">
+              <div class="f-lbl" style="color:var(--gold);margin-bottom:.3rem">GENERATE MEME IMAGES WITH DALL-E 3</div>
+              <div class="f-lbl" style="opacity:.7;margin-bottom:.5rem;font-size:.48rem">Creates 4 original Celestial Yokai scene images matching your meme concepts. Overlay your NFT on top of each image.</div>
+              <div class="spinner" id="imggen-spinner"><div class="sp-dots"><div class="sp-dot"></div><div class="sp-dot"></div><div class="sp-dot"></div></div><span class="sp-txt">Generating images with DALL-E 3...</span></div>
+              <div class="err-box" id="imggen-err"></div>
+              <button class="btn btn-gold" id="imggen-btn" onclick="generateImages()">GENERATE IMAGES WITH DALL-E 3 ✦</button>
+              <div id="imggen-results" style="display:none;margin-top:.65rem">
+                <div class="f-lbl" style="margin-bottom:.5rem">GENERATED MEME SCENES — overlay your NFT on top of each</div>
+                <div id="imggen-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -498,6 +509,50 @@ async function loadSessions(){
     list.innerHTML=d.sessions.map(s=>`<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;border-radius:var(--r);background:rgba(0,0,0,.3);margin-bottom:.3rem;flex-wrap:wrap"><span style="font-size:.55rem;color:var(--text)">${s.username}</span>${s.isAdmin?'<span class="nav-badge nb-admin">ADMIN</span>':''}${s.isHolder?'<span class="nav-badge nb-holder">HOLDER</span>':''}<span style="font-size:.42rem;color:var(--dim);margin-left:auto">${s.discordId}</span><span style="font-size:.42rem;color:var(--dim)">${new Date(s.verifiedAt).toLocaleString()}</span></div>`).join('');
   }catch(e){$('sessions-list').textContent='Failed: '+e.message;}
   finally{sp('sessions-spinner',false);}
+}
+
+async function generateImages(){
+  if(!window._memes||!window._memes.length){showErr('imggen-err','Generate meme concepts first.');return;}
+  const nftAnalysis=window._nftAnalysis||'';
+  sp('imggen-spinner',true);$('imggen-btn').disabled=true;$('imggen-btn').textContent='GENERATING...';
+  hide('imggen-results');hideMsg('imggen-err');
+  try{
+    const r=await fetch('/api/holder/generate-meme-images',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({memes:window._memes,nftAnalysis,nftName:$('meme-name')?.value||'Kitsari NFT'}),
+    });
+    const d=await r.json();
+    if(r.status===429){showErr('imggen-err',d.error+' '+( d.upgrade||''));return;}
+    if(!r.ok)throw new Error(d.error||'Failed');
+    const grid=$('imggen-grid');
+    grid.innerHTML=d.images.map((img,i)=>img.success
+      ?`<div style="border-radius:var(--r);overflow:hidden;border:1px solid var(--borderdim)">
+          <img src="${img.imageUrl}" style="width:100%;display:block;border-radius:var(--r) var(--r) 0 0" loading="lazy"/>
+          <div style="padding:.4rem .5rem;font-size:.42rem;color:var(--purple)">MEME ${i+1} — ${img.meme?.vibe?.toUpperCase()||''}</div>
+          <div style="padding:0 .5rem .4rem;font-size:.42rem;color:var(--dim)">Overlay: "${img.meme?.topText}" / "${img.meme?.botText}"</div>
+          <a href="${img.imageUrl}" download="kitsari-meme-${i+1}.png" style="display:block;text-align:center;padding:.3rem;font-size:.44rem;color:var(--gold);border-top:1px solid var(--borderdim)">DOWNLOAD ↓</a>
+        </div>`
+      :`<div style="border:1px solid rgba(255,107,107,.2);border-radius:var(--r);padding:.5rem;font-size:.5rem;color:var(--red)">Image ${i+1} failed: ${img.error||'error'}</div>`
+    ).join('');
+    show('imggen-results');
+    showOk('imggen-err',d.generated+' of '+d.total+' images generated. Download within 1 hour.');
+    $('imggen-err').style.color='var(--green)';$('imggen-err').style.borderColor='rgba(74,222,128,.2)';
+  }catch(e){showErr('imggen-err',e.message);}
+  finally{sp('imggen-spinner',false);$('imggen-btn').disabled=false;$('imggen-btn').textContent='GENERATE IMAGES WITH DALL-E 3 ✦';}
+}
+
+// Store NFT analysis globally for image generation
+const _origRenderMemes=renderMemes;
+function renderMemes(memes,analysis){
+  window._nftAnalysis=analysis||'';
+  _origRenderMemes(memes);
+}
+
+// Handle rate limit errors in all fetch calls gracefully
+async function apiPost(url, body){
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.status===429){const d=await r.json();throw new Error(d.error+' '+( d.upgrade||''));}
+  return r;
 }
 
 checkSession();
