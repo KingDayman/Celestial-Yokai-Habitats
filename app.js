@@ -914,11 +914,11 @@ app.get("/health", (req, res) => res.json({
 // Add to app.js after existing routes, before static/SPA fallback
 // ════════════════════════════════════════════════════════════════════════
 
-const DISCORD_CLIENT_ID     = process.env.DISCORD_CLIENT_ID;
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+const DISCORD_CLIENT_ID     = process.env.DISCORD_CLIENT_ID     || "1518077281665286324";
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || "4GSQyUpYybtUBrED1Nary0WbXefkQqad";
 const DISCORD_GUILD_ID      = process.env.DISCORD_GUILD_ID      || "1489281154522677280";
 const DISCORD_WANDERER_ROLE = process.env.DISCORD_WANDERER_ROLE_ID || "1504725209087869009";
-const DISCORD_REDIRECT_URI  = process.env.DISCORD_REDIRECT_URI;
+const DISCORD_REDIRECT_URI  = process.env.DISCORD_REDIRECT_URI  || "https://celestial-yokai-habitats-production.up.railway.app/api/auth/discord/callback";
 const DISCORD_ADMIN_ID      = process.env.DISCORD_ADMIN_ID || "834262283826757663"; // also set in Railway vars
 const KITSARI_CONTRACT      = process.env.KITSARI_CONTRACT       || "AtYGtFGHHkqBURkXrLkurUfLo929mhU2hmtUznfri1rg";
 const HELIUS_RPC            = process.env.HELIUS_RPC             || "https://api.mainnet-beta.solana.com";
