@@ -1594,6 +1594,70 @@ app.get("/api/admin/yc-sales/csv", requireAdmin, (req, res) => {
   res.send(header + rows);
 });
 
+
+// ════════════════════════════════════════════════════════════════════════
+// DALL-E 3 MEME IMAGE GENERATION
+// ════════════════════════════════════════════════════════════════════════
+app.post("/api/holder/generate-meme-images", requireHolder, async (req, res) => {
+  req.setTimeout(180000);
+  if (!openai) {
+    return res.status(503).json({ error: "Image generation not configured. Add OPENAI_API_KEY to Railway variables." });
+  }
+
+  const { memes, nftAnalysis, nftName = "Kitsari NFT", hasYC = false } = req.body;
+  if (!memes || !memes.length) return res.status(400).json({ error: "memes array required" });
+
+  const sess = getSession(req);
+  const rl = checkRate(sess?.discordId || "anon", "imggen", hasYC);
+  if (!rl.allowed) {
+    return res.status(429).json({
+      error: "Image generation limit reached (" + rl.count + "/" + rl.max + " per minute).",
+      upgrade: "Spend 100K YC to unlock 8/minute.",
+      retryAfter: 60
+    });
+  }
+
+  const results = [];
+  for (let i = 0; i < Math.min(memes.length, 4); i++) {
+    const meme = memes[i];
+    // Keep prompt focused and under 1000 chars — avoids SDK pattern validation errors
+    const prompt = (
+      "Celestial Yokai universe illustration. Dark anime aesthetic, deep purple and gold palette, night market atmosphere. " +
+      "Meme format: " + (meme.format || "image macro") + ". " +
+      "Vibe: " + (meme.vibe || "mystical") + ". " +
+      "Scene: " + (nftAnalysis ? nftAnalysis.slice(0, 200) : "fox spirit in mystic robes") + ". " +
+      "Leave clear negative space at top and bottom for text overlays. " +
+      "No text in image. Square composition. Original artwork only."
+    ).slice(0, 900);
+
+    try {
+      const resp = await openai.images.generate({
+        model: "dall-e-3",
+        prompt,
+        n: 1,
+        size: "1024x1024",
+      });
+      results.push({
+        index: i, meme,
+        imageUrl: resp.data[0].url,
+        success: true,
+      });
+      console.log("[DALL-E] Image", i + 1, "generated OK");
+    } catch (e) {
+      console.error("[DALL-E] Image", i + 1, "failed:", e.message);
+      results.push({ index: i, meme, error: e.message, success: false });
+    }
+  }
+
+  res.json({
+    success: true,
+    images: results,
+    generated: results.filter(r => r.success).length,
+    total: Math.min(memes.length, 4),
+    note: "Images expire after 1 hour — download them promptly. Overlay your NFT on top of each scene.",
+  });
+});
+
 // ── Page routes ───────────────────────────────────
 const HOME_HTML    = path.join(PUBLIC, 'home.html');
 const CONSOLE_HTML = path.join(PUBLIC, 'console.html');
