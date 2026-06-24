@@ -1,265 +1,139 @@
-// ✦ Kitsari Commerce Console v2.1 — SQLite + OpenAI + rate limiting
+// ✦ Kitsari Commerce Console v2.1 — production
 const express  = require("express");
 const Anthropic = require("@anthropic-ai/sdk");
 const path     = require("path");
 const crypto   = require("crypto");
 
-// ── SQLite — persistent sessions + draft queue ───────────────────────────
-let db;
-try {
-  const Database = require("better-sqlite3");
-  const DB_PATH  = process.env.DB_PATH || path.join(__dirname, "kitsari.db");
-  db = new Database(DB_PATH);
-  if(db.pragma) db.pragma("journal_mode = WAL");
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      token        TEXT PRIMARY KEY,
-      discord_id   TEXT NOT NULL,
-      username     TEXT,
-      global_name  TEXT,
-      avatar       TEXT,
-      is_admin     INTEGER DEFAULT 0,
-      is_holder    INTEGER DEFAULT 0,
-      has_wanderer INTEGER DEFAULT 0,
-      wallet       TEXT,
-      nft_verified INTEGER DEFAULT 0,
-      logged_in_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS drafts (
-      id               INTEGER PRIMARY KEY AUTOINCREMENT,
-      discord_id       TEXT NOT NULL,
-      submitter_name   TEXT,
-      submitter_avatar TEXT,
-      product_type     TEXT DEFAULT 'sticker',
-      concept          TEXT,
-      ai_draft         TEXT,
-      notes            TEXT,
-      status           TEXT DEFAULT 'pending',
-      review_note      TEXT,
-      reviewed_at      INTEGER,
-      submitted_at     INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS rate_limits (
-      key          TEXT PRIMARY KEY,
-      count        INTEGER DEFAULT 0,
-      window_start INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS yc_upgrades (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      discord_id   TEXT NOT NULL,
-      action       TEXT NOT NULL,
-      tx_sig       TEXT NOT NULL UNIQUE,
-      yc_amount    INTEGER NOT NULL,
-      wallet_from  TEXT,
-      purchased_at INTEGER NOT NULL,
-      expires_at   INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS yc_sales (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      discord_id   TEXT NOT NULL,
-      username     TEXT,
-      action       TEXT NOT NULL,
-      yc_amount    INTEGER NOT NULL,
-      usd_equiv    REAL DEFAULT 0,
-      tx_sig       TEXT NOT NULL UNIQUE,
-      wallet_from  TEXT,
-      burn_wallet  TEXT NOT NULL,
-      sold_at      INTEGER NOT NULL
-    );
-  `);
-  console.log("[DB] SQLite connected:", DB_PATH);
-} catch (e) {
-  console.warn("[DB] SQLite unavailable, using in-memory:", e.message);
-  db = null;
+// ── Pure in-memory stores (fast, zero native deps) ───────────────────────
+// Sessions: token → session object
+const _sessions  = {};
+// Drafts: array of draft objects
+const _drafts    = [];
+let   _draftId   = 1;
+// Rate limits: "discordId:action" → {count, start}
+const _rl        = {};
+// YC upgrades: "discordId:action" → {expiresAt, txSig, amount}
+const _ycUpgrades = {};
+// YC sales history: array
+const _ycSales   = [];
+
+// db = null means SQLite not available — all functions use in-memory
+const db = null;
+
+// ── Session helpers ────────────────────────────────────────────────────────
+function dbSessionSet(token, s) { _sessions[token] = s; }
+function dbSessionGet(token)    { return _sessions[token] || null; }
+function dbSessionDel(token)    { delete _sessions[token]; }
+function dbSessionList() {
+  return Object.entries(_sessions)
+    .filter(([k,v]) => v && v.discordId && !k.startsWith("_state_"))
+    .map(([,v]) => ({
+      discordId: v.discordId, username: v.username, globalName: v.globalName,
+      avatar: v.avatar, isAdmin: !!v.isAdmin, isHolder: !!v.isHolder,
+      hasWanderer: !!v.hasWanderer, wallet: v.wallet,
+      verifiedAt: v.loggedInAt ? new Date(v.loggedInAt).toISOString() : null,
+    }));
+}
+function dbSessionUpdate(token, fields) {
+  if (_sessions[token]) Object.assign(_sessions[token], fields);
 }
 
-// ── DB helpers ─────────────────────────────────────────────────────────
-const _mS = {}; const _mD = []; let _mDid = 1;
-function dbSessionSet(token, s) {
-  if (db) db.prepare(`INSERT OR REPLACE INTO sessions
-    (token,discord_id,username,global_name,avatar,is_admin,is_holder,has_wanderer,wallet,nft_verified,logged_in_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
-    token,s.discordId,s.username,s.globalName||null,s.avatar||null,
-    s.isAdmin?1:0,s.isHolder?1:0,s.hasWanderer?1:0,s.wallet||null,s.nftVerified?1:0,s.loggedInAt||Date.now());
-  else _mS[token]=s;
-}
-function dbSessionGet(token) {
-  if (db) {
-    const r=db.prepare("SELECT * FROM sessions WHERE token=?").get(token);
-    if(!r)return null;
-    return {token,discordId:r.discord_id,username:r.username,globalName:r.global_name,
-      avatar:r.avatar,isAdmin:!!r.is_admin,isHolder:!!r.is_holder,hasWanderer:!!r.has_wanderer,
-      wallet:r.wallet,nftVerified:!!r.nft_verified,loggedInAt:r.logged_in_at};
-  }
-  return _mS[token]||null;
-}
-function dbSessionDel(token){ if(db)db.prepare("DELETE FROM sessions WHERE token=?").run(token); else delete _mS[token]; }
-function dbSessionUpdate(token,fields){ const s=dbSessionGet(token); if(s)dbSessionSet(token,{...s,...fields}); }
-function dbSessionList(){
-  if(db)return db.prepare("SELECT * FROM sessions ORDER BY logged_in_at DESC").all().map(r=>({
-    discordId:r.discord_id,username:r.username,globalName:r.global_name,avatar:r.avatar,
-    isAdmin:!!r.is_admin,isHolder:!!r.is_holder,hasWanderer:!!r.has_wanderer,
-    wallet:r.wallet,nftVerified:!!r.nft_verified,verifiedAt:new Date(r.logged_in_at).toISOString()
-  }));
-  return Object.values(_mS);
-}
-function dbDraftAdd(d){
-  if(db){
-    const res=db.prepare(`INSERT INTO drafts
-      (discord_id,submitter_name,submitter_avatar,product_type,concept,ai_draft,notes,submitted_at)
-      VALUES(?,?,?,?,?,?,?,?)`).run(
-      d.discordId,d.submitterName||null,d.submitterAvatar||null,
-      d.productType||'sticker',d.concept||null,d.aiDraft||null,d.notes||null,Date.now());
-    return res.lastInsertRowid;
-  }
-  const id=_mDid++;
-  _mD.push({id,...d,status:'pending',submittedAt:new Date().toISOString()});
+// ── Draft helpers ──────────────────────────────────────────────────────────
+function dbDraftAdd(d) {
+  const id = _draftId++;
+  _drafts.push({ id, ...d, status: "pending", submittedAt: new Date().toISOString() });
   return id;
 }
-function dbDraftList(filter){
-  const toObj=r=>({id:r.id,discordId:r.discord_id||r.discordId,submitterName:r.submitter_name||r.submitterName,
-    submitterAvatar:r.submitter_avatar||r.submitterAvatar,productType:r.product_type||r.productType,
-    concept:r.concept,aiDraft:r.ai_draft||r.aiDraft,notes:r.notes,status:r.status,
-    reviewNote:r.review_note||r.reviewNote,
-    submittedAt:r.submitted_at?new Date(r.submitted_at).toISOString():r.submittedAt,
-    reviewedAt:r.reviewed_at?new Date(r.reviewed_at).toISOString():null});
-  if(db){
-    return filter&&filter!=='all'
-      ?db.prepare("SELECT * FROM drafts WHERE status=? ORDER BY submitted_at DESC").all(filter).map(toObj)
-      :db.prepare("SELECT * FROM drafts ORDER BY submitted_at DESC").all().map(toObj);
+function dbDraftList(filter) {
+  const all = [..._drafts].reverse();
+  return filter && filter !== "all" ? all.filter(d => d.status === filter) : all;
+}
+function dbDraftMine(discordId) {
+  return [..._drafts].reverse()
+    .filter(d => d.discordId === discordId)
+    .map(d => ({ id: d.id, productType: d.productType, concept: d.concept,
+      status: d.status, reviewNote: d.reviewNote, submittedAt: d.submittedAt }));
+}
+function dbDraftUpdate(id, fields) {
+  const d = _drafts.find(x => x.id === id);
+  if (d) {
+    if (fields.reviewNote  !== undefined) d.reviewNote  = fields.reviewNote;
+    if (fields.status      !== undefined) d.status      = fields.status;
+    if (fields.review_note !== undefined) d.reviewNote  = fields.review_note;
+    if (fields.reviewed_at !== undefined) d.reviewedAt  = new Date(fields.reviewed_at).toISOString();
   }
-  return filter&&filter!=='all'?_mD.filter(d=>d.status===filter).map(toObj):[..._mD].map(toObj);
-}
-function dbDraftMine(discordId){
-  const toObj=r=>({id:r.id||r.id,productType:r.product_type||r.productType,concept:r.concept,
-    status:r.status,reviewNote:r.review_note||r.reviewNote,
-    submittedAt:r.submitted_at?new Date(r.submitted_at).toISOString():r.submittedAt});
-  if(db)return db.prepare("SELECT * FROM drafts WHERE discord_id=? ORDER BY submitted_at DESC").all(discordId).map(toObj);
-  return _mD.filter(d=>d.discordId===discordId).map(toObj);
-}
-function dbDraftUpdate(id,fields){
-  if(db){
-    const map={reviewNote:'review_note',reviewedAt:'reviewed_at',status:'status'};
-    const cols=Object.keys(fields).map(k=>( map[k]||k )+'=?').join(',');
-    db.prepare(`UPDATE drafts SET ${cols} WHERE id=?`).run(...Object.values(fields),id);
-  } else { const d=_mD.find(x=>x.id===id); if(d)Object.assign(d,fields); }
 }
 
-// ── Rate limiting ──────────────────────────────────────────────────────
+// ── Rate limiting ──────────────────────────────────────────────────────────
 const RATE_WINDOW = 60000;
 const RATE_LIMITS = { chat:{free:10,yc:30}, meme:{free:3,yc:10}, draft:{free:5,yc:20}, imggen:{free:2,yc:8} };
-const YC_PRICES = { chat:100000, draft:50000, meme:50000, imggen:100000 }; // YC required per upgrade
-const YC_MINT        = "7bPUfM26oCHkVLXNpDR7dgwmGoTiaTsaK2uPSAHUpump";
-const BURN_WALLET    = "HCjg9usafd2QcecA5KacRJg98AzeM5ExafUEA5LVp2ah";
-const YC_UPGRADE_DAYS = 30; // upgrade lasts 30 days
-const SOLANA_RPC     = process.env.HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
+const YC_PRICES   = { chat:100000, draft:50000, meme:50000, imggen:100000 };
+const YC_MINT     = "7bPUfM26oCHkVLXNpDR7dgwmGoTiaTsaK2uPSAHUpump";
+const BURN_WALLET = "HCjg9usafd2QcecA5KacRJg98AzeM5ExafUEA5LVp2ah";
+const YC_UPGRADE_DAYS = 30;
 
-// Check if a holder has an active YC upgrade for an action
 function hasYCUpgrade(discordId, action) {
-  if (!db) return false;
-  const now = Date.now();
-  const row = db.prepare(
-    "SELECT id FROM yc_upgrades WHERE discord_id=? AND action=? AND expires_at>? ORDER BY expires_at DESC LIMIT 1"
-  ).get(discordId, action, now);
-  return !!row;
+  const key = discordId + ":" + action;
+  const u = _ycUpgrades[key];
+  return u && u.expiresAt > Date.now();
 }
 
-// Verify a Solana transaction sent YC to the burn wallet
+function checkRate(discordId, action, hasYC = false) {
+  if (!hasYC && discordId) hasYC = hasYCUpgrade(discordId, action);
+  const lim = RATE_LIMITS[action] || { free:5, yc:15 };
+  const max = hasYC ? lim.yc : lim.free;
+  const key = (discordId || "anon") + ":" + action;
+  const now = Date.now();
+  const r   = _rl[key];
+  if (!r || now - r.start > RATE_WINDOW) { _rl[key] = { count:1, start:now }; return { allowed:true, count:1, max }; }
+  if (r.count >= max) return { allowed:false, count:r.count, max };
+  r.count++;
+  return { allowed:true, count:r.count, max };
+}
+
+// ── YC verification (Solana) ────────────────────────────────────────────
+const SOLANA_RPC = process.env.HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
 async function verifyYCTransaction(txSig, requiredAmount) {
   try {
     const resp = await fetch(SOLANA_RPC, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0", id: 1,
-        method: "getTransaction",
-        params: [txSig, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 }],
-      }),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc:"2.0", id:1, method:"getTransaction",
+        params:[txSig, { encoding:"jsonParsed", commitment:"confirmed", maxSupportedTransactionVersion:0 }] }),
     });
     const data = await resp.json();
     const tx = data?.result;
-    if (!tx) return { valid: false, error: "Transaction not found or not confirmed yet" };
-    if (tx.meta?.err) return { valid: false, error: "Transaction failed on-chain" };
-
-    // Parse token balance changes to find YC transfer to burn wallet
-    const preBalances  = tx.meta?.preTokenBalances  || [];
-    const postBalances = tx.meta?.postTokenBalances || [];
-
-    // Find accounts that gained YC (destination)
-    let burnReceived = 0;
-    let senderWallet = null;
-
-    for (const post of postBalances) {
+    if (!tx) return { valid:false, error:"Transaction not found or not confirmed" };
+    if (tx.meta?.err) return { valid:false, error:"Transaction failed on-chain" };
+    const preB = tx.meta?.preTokenBalances  || [];
+    const posB = tx.meta?.postTokenBalances || [];
+    let burnReceived = 0, senderWallet = null;
+    for (const post of posB) {
       if (post.mint !== YC_MINT) continue;
-      const pre = preBalances.find(p => p.accountIndex === post.accountIndex);
-      const preAmt  = parseInt(pre?.uiTokenAmount?.amount  || "0");
-      const postAmt = parseInt(post.uiTokenAmount?.amount  || "0");
-      const gained  = postAmt - preAmt;
-      if (gained > 0 && post.owner === BURN_WALLET) {
-        burnReceived += gained;
-      }
+      const pre = preB.find(p => p.accountIndex === post.accountIndex);
+      const gained = parseInt(post.uiTokenAmount?.amount||"0") - parseInt(pre?.uiTokenAmount?.amount||"0");
+      if (gained > 0 && post.owner === BURN_WALLET) burnReceived += gained;
     }
-
-    // Find sender (lost YC)
-    for (const pre of preBalances) {
+    for (const pre of preB) {
       if (pre.mint !== YC_MINT) continue;
-      const post = postBalances.find(p => p.accountIndex === pre.accountIndex);
-      const preAmt  = parseInt(pre.uiTokenAmount?.amount  || "0");
-      const postAmt = parseInt(post?.uiTokenAmount?.amount || "0");
-      if (preAmt > postAmt) {
-        senderWallet = pre.owner;
-        break;
+      const post = posB.find(p => p.accountIndex === pre.accountIndex);
+      if (parseInt(pre.uiTokenAmount?.amount||"0") > parseInt(post?.uiTokenAmount?.amount||"0")) {
+        senderWallet = pre.owner; break;
       }
     }
-
-    // YC has 6 decimals on pump.fun
-    const ycDecimals = 6;
-    const burnReceivedHuman = burnReceived / Math.pow(10, ycDecimals);
-
-    console.log("[YC] tx:", txSig, "burnReceived:", burnReceivedHuman, "required:", requiredAmount);
-
-    if (burnReceivedHuman < requiredAmount) {
-      return { valid: false, error: "Insufficient YC sent. Got " + burnReceivedHuman.toLocaleString() + " YC, need " + requiredAmount.toLocaleString() + " YC." };
-    }
-    return { valid: true, amountHuman: burnReceivedHuman, amountRaw: burnReceived, senderWallet };
-  } catch (e) {
-    console.error("[YC] Verify error:", e.message);
-    return { valid: false, error: "Verification failed: " + e.message };
-  }
-}
-function checkRate(discordId, action, hasYC=false){
-  // Auto-upgrade if they have an active YC purchase
-  if(!hasYC && discordId) hasYC=hasYCUpgrade(discordId, action);
-  const key=discordId+':'+action;
-  const lim=RATE_LIMITS[action]||{free:5,yc:15};
-  const max=hasYC?lim.yc:lim.free;
-  const now=Date.now();
-  if(db){
-    const row=db.prepare("SELECT * FROM rate_limits WHERE key=?").get(key);
-    if(!row||now-row.window_start>RATE_WINDOW){
-      db.prepare("INSERT OR REPLACE INTO rate_limits(key,count,window_start)VALUES(?,1,?)").run(key,now);
-      return {allowed:true,count:1,max};
-    }
-    if(row.count>=max)return{allowed:false,count:row.count,max};
-    db.prepare("UPDATE rate_limits SET count=count+1 WHERE key=?").run(key);
-    return{allowed:true,count:row.count+1,max};
-  }
-  if(!global._rl)global._rl={};
-  const r=global._rl[key];
-  if(!r||now-r.start>RATE_WINDOW){global._rl[key]={count:1,start:now};return{allowed:true,count:1,max};}
-  if(r.count>=max)return{allowed:false,count:r.count,max};
-  r.count++;return{allowed:true,count:r.count,max};
+    const burnHuman = burnReceived / 1e6;
+    if (burnHuman < requiredAmount) return { valid:false, error:"Got "+burnHuman.toLocaleString()+" YC, need "+requiredAmount.toLocaleString()+" YC." };
+    return { valid:true, amountHuman:burnHuman, amountRaw:burnReceived, senderWallet };
+  } catch (e) { return { valid:false, error:"Verification failed: "+e.message }; }
 }
 
-// ── OpenAI / DALL-E ───────────────────────────────────────────────────
-let openai=null;
-try{
-  const {OpenAI}=require("openai");
-  const key=process.env.OPENAI_API_KEY;
-  if(key){openai=new OpenAI({apiKey:key});console.log("[OpenAI] DALL-E ready");}
-  else console.warn("[OpenAI] OPENAI_API_KEY not set");
-}catch(e){console.warn("[OpenAI] Package not available:",e.message);}
-
+// ── OpenAI / DALL-E (optional) ────────────────────────────────────────────
+let openai = null;
+try {
+  const { OpenAI } = require("openai");
+  const key = process.env.OPENAI_API_KEY;
+  if (key) { openai = new OpenAI({ apiKey: key }); console.log("[OpenAI] DALL-E ready"); }
+  else console.warn("[OpenAI] OPENAI_API_KEY not set — image generation disabled");
+} catch(e) { console.warn("[OpenAI] Package not available:", e.message); }
 const app  = express();
 const PORT = process.env.PORT || 8080;
 
@@ -1607,11 +1481,9 @@ app.get("/api/holder/yc-status", requireHolder, (req, res) => {
   for (const action of actions) {
     const upgraded = hasYCUpgrade(sess.discordId, action);
     let expiresAt = null;
-    if (db && upgraded) {
-      const row = db.prepare(
-        "SELECT expires_at FROM yc_upgrades WHERE discord_id=? AND action=? AND expires_at>? ORDER BY expires_at DESC LIMIT 1"
-      ).get(sess.discordId, action, now);
-      expiresAt = row ? new Date(row.expires_at).toISOString() : null;
+    if (upgraded) {
+      const u = _ycUpgrades[sess.discordId + ":" + action];
+      expiresAt = u ? new Date(u.expiresAt).toISOString() : null;
     }
     status[action] = {
       upgraded,
@@ -1640,10 +1512,8 @@ app.post("/api/holder/yc-upgrade", requireHolder, async (req, res) => {
   const required = YC_PRICES[action];
 
   // Check if this tx was already used
-  if (db) {
-    const existing = db.prepare("SELECT id FROM yc_upgrades WHERE tx_sig=?").get(txSig);
-    if (existing) return res.status(400).json({ error: "This transaction has already been used to activate an upgrade." });
-  }
+  const alreadyUsed = _ycSales.find(s => s.txSig === txSig);
+  if (alreadyUsed) return res.status(400).json({ error: "This transaction has already been used." });
 
   // Verify on Solana
   const verification = await verifyYCTransaction(txSig, required);
@@ -1652,23 +1522,15 @@ app.post("/api/holder/yc-upgrade", requireHolder, async (req, res) => {
   const now       = Date.now();
   const expiresAt = now + (YC_UPGRADE_DAYS * 24 * 60 * 60 * 1000);
 
-  // Record upgrade
-  if (db) {
-    db.prepare(`INSERT OR IGNORE INTO yc_upgrades
-      (discord_id,action,tx_sig,yc_amount,wallet_from,purchased_at,expires_at)
-      VALUES (?,?,?,?,?,?,?)`
-    ).run(sess.discordId, action, txSig, verification.amountRaw, verification.senderWallet||null, now, expiresAt);
+  // Record upgrade in memory
+  _ycUpgrades[sess.discordId + ":" + action] = { expiresAt, txSig, amountHuman: verification.amountHuman };
 
-    // Record sale for burn tracking
-    db.prepare(`INSERT OR IGNORE INTO yc_sales
-      (discord_id,username,action,yc_amount,tx_sig,wallet_from,burn_wallet,sold_at)
-      VALUES (?,?,?,?,?,?,?,?)`
-    ).run(
-      sess.discordId, sess.username||"Unknown", action,
-      verification.amountRaw, txSig, verification.senderWallet||null,
-      BURN_WALLET, now
-    );
-  }
+  // Record sale
+  _ycSales.push({
+    id: _ycSales.length + 1, discordId: sess.discordId, username: sess.username||"Unknown",
+    action, ycAmount: verification.amountHuman, txSig, walletFrom: verification.senderWallet||null,
+    burnWallet: BURN_WALLET, soldAt: new Date(now).toISOString(), month: new Date(now).toISOString().slice(0,7),
+  });
 
   const labels = { chat:"Chat (30/min)", draft:"Draft Gen (20/min)", meme:"Meme Forge (10/min)", imggen:"Image Gen (8/min)" };
   console.log("[YC] Upgrade activated:", sess.username, action, verification.amountHuman, "YC");
@@ -1685,19 +1547,17 @@ app.post("/api/holder/yc-upgrade", requireHolder, async (req, res) => {
 
 // ── ADMIN: YC Sales History ──────────────────────────────────────────────
 app.get("/api/admin/yc-sales", requireAdmin, (req, res) => {
-  if (!db) return res.json({ sales:[], totals:{}, burnSummary:[] });
-
-  const sales = db.prepare("SELECT * FROM yc_sales ORDER BY sold_at DESC").all().map(r => ({
+  const sales = [..._ycSales].reverse().map(r => ({
     id:          r.id,
-    discordId:   r.discord_id,
+    discordId:   r.discordId,
     username:    r.username,
     action:      r.action,
-    ycAmount:    r.yc_amount / 1e6, // convert from raw
-    txSig:       r.tx_sig,
-    walletFrom:  r.wallet_from,
-    burnWallet:  r.burn_wallet,
-    soldAt:      new Date(r.sold_at).toISOString(),
-    month:       new Date(r.sold_at).toISOString().slice(0,7),
+    ycAmount:    r.ycAmount,
+    txSig:       r.txSig,
+    walletFrom:  r.walletFrom,
+    burnWallet:  r.burnWallet,
+    soldAt:      r.soldAt,
+    month:       r.month||r.soldAt?.slice(0,7),
   }));
 
   // Monthly burn summary
@@ -1723,14 +1583,12 @@ app.get("/api/admin/yc-sales", requireAdmin, (req, res) => {
 
 // CSV export for burn reporting
 app.get("/api/admin/yc-sales/csv", requireAdmin, (req, res) => {
-  if (!db) return res.status(503).send("Database not available");
-  const sales = db.prepare("SELECT * FROM yc_sales ORDER BY sold_at DESC").all();
+  const sales = [..._ycSales].reverse();
   const header = "ID,Discord ID,Username,Action,YC Amount,TX Signature,Wallet From,Burn Wallet,Date\n";
   const rows = sales.map(r => [
-    r.id, r.discord_id, r.username, r.action,
-    (r.yc_amount/1e6).toFixed(0), r.tx_sig, r.wallet_from||"", r.burn_wallet,
-    new Date(r.sold_at).toISOString()
-  ].map(v=>`"${v}"`).join(",")).join("\n");
+    r.id, r.discordId, r.username, r.action,
+    r.ycAmount, r.txSig, r.walletFrom||"", r.burnWallet, r.soldAt
+  ].map(v=>'"'+String(v)+'"').join(",")).join("\n");
   res.setHeader("Content-Type","text/csv");
   res.setHeader("Content-Disposition", 'attachment; filename="yc-sales-'+new Date().toISOString().slice(0,10)+'.csv"');
   res.send(header + rows);
